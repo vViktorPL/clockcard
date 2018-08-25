@@ -1,0 +1,134 @@
+body {
+    text-align: center;
+    -webkit-user-select:none;
+    background: Window;
+    font: caption;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+#container {
+    position: fixed;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+#container > div {
+    height: 100%;
+}
+
+.app {
+    width: 100%;
+    height: 100%;
+}
+
+.issue-list {
+    box-sizing: border-box;
+    display: inline-block;
+    float: left;
+    width: 40%;
+    border-right: WindowFrame 1px solid;
+    height: 100%;
+    font-size: 16px;
+    background: Menu;
+}
+
+.issue-list__item {
+    width: 100%;
+    cursor: pointer;
+    padding: 4px;
+}
+
+.issue-list__item--selected {
+    background: Highlight;
+    color: HighlightText;
+}
+
+.issue-list__item--running::after {
+    content: "▶";
+    display: inline-block;
+    margin-left: 4px;
+    animation: blinker 3s linear infinite;
+}
+
+@keyframes blinker {
+    50% {
+        opacity: 0.3;
+    }
+}
+
+.issue-list__add-button {
+    cursor: pointer;
+    font-weight: bold;
+    padding: 4px;
+}
+
+/*.issue-list__add-button:hover {*/
+    /*background: black;*/
+    /*color: white;*/
+/*}*/
+
+.issue-list__add-button input {
+    width: 100%;
+    text-align: center;
+    font-size: inherit;
+    padding: 4px;
+    margin: -4px;
+}
+
+.stopwatch {
+    display: inline-block;
+    width: 60%;
+    padding-top: 25px;
+    text-align: center;
+    font-size: 80px;
+    font-family: sans-serif;
+    cursor: default;
+}
+
+.stopwatch__control {
+    display: block;
+    text-align: center;
+}
+
+.stopwatch button {
+    display: inline-block;
+    text-transform: uppercase;
+    width: 160px;
+    height: 60px;
+    font-size: 32px;
+
+    outline-width: 2px;
+    outline-style: solid;
+    outline-color: Highlight;
+}
+
+@media (-webkit-min-device-pixel-ratio:0) {
+    .stopwatch button {
+        outline-color: -webkit-focus-ring-color;
+        outline-style: auto;
+    }
+}
+
+/* WebKit gets its native focus styles.
+ */
+@media (-webkit-min-device-pixel-ratio:0) {
+    .unreal-focus {
+        outline-color: -webkit-focus-ring-color;
+        outline-style: auto;
+    }
+}
+
+/*.comment-section {*/
+    /*text-align: left;*/
+/*}*/
+
+/*textarea {*/
+    /*width: 100%;*/
+    /*height: 220px;*/
+    /*font-size: 24px;*/
+/*}*/

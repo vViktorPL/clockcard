@@ -1,0 +1,28 @@
+{
+  "name": "electron-quick-start",
+  "version": "1.0.0",
+  "description": "A minimal Electron application",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "elm": "elm make ./src/elm/Main.elm --output ./src/static/elm.js || true",
+    "elm:watch": "chokidar 'src/**/*.elm' -c 'yarn elm'",
+    "watch": "yarn start & yarn elm:watch & wait"
+  },
+  "repository": "https://github.com/electron/electron-quick-start",
+  "keywords": [
+    "Electron",
+    "quick",
+    "start",
+    "tutorial",
+    "demo"
+  ],
+  "author": "GitHub",
+  "license": "CC0-1.0",
+  "devDependencies": {
+    "chokidar-cli": "^1.2.0",
+    "electron": "~1.7.8",
+    "elm": "^0.18.0"
+  },
+  "dependencies": {}
+}
