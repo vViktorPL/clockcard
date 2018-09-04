@@ -1,45 +1,60 @@
-# electron-quick-start
+# ClockCard
 
-**Clone and run for a quick way to see Electron in action.**
+![ClockCard logo](logo.svg)
 
-This is a minimal Electron application based on the [Quick Start Guide](http://electron.atom.io/docs/tutorial/quick-start) within the Electron documentation.
+ClockCard is a time tracking app that will also handle everything that is toilsome related to it.
 
-**Use this app along with the [Electron API Demos](http://electron.atom.io/#get-started) app for API code examples to help you get started.**
+The core features for this app are:
 
-A basic Electron application needs just these files:
+* Controlling time tracking for each issue separately through user-friendly stopwatch
+* Straightforward time logging to external worklog systems (integration with JIRA and Google Spreadsheets)
 
-- `package.json` - Points to the app's main file and lists its details and dependencies.
-- `main.js` - Starts the app and creates a browser window to render HTML. This is the app's **main process**.
-- `index.html` - A web page to render. This is the app's **renderer process**.
+## Technologies used
 
-You can learn more about each of these components within the [Quick Start Guide](http://electron.atom.io/docs/tutorial/quick-start).
+![Electron logo](elm-electron-logos.svg)
 
-## To Use
+The app is powered by [Elm programming language](http://elm-lang.org/) + [Electron](https://electronjs.org/) . 
+Elm itself has some limitations in terms of side-effect involving issues like saving the app state so Elm app cooperates
+with some JavaScript when performing such tasks through Elm's builtin [Ports](https://guide.elm-lang.org/interop/ports.html) feature.
 
-To clone and run this repository you'll need [Git](https://git-scm.com) and [Node.js](https://nodejs.org/en/download/) (which comes with [npm](http://npmjs.com)) installed on your computer. From your command line:
 
+## Development
 ```bash
 # Clone this repository
-git clone https://github.com/electron/electron-quick-start
+git clone git@bitbucket.org:vViktor/clockcard.git
 # Go into the repository
-cd electron-quick-start
+cd clockcard
 # Install dependencies
-npm install
-# Run the app
-npm start
+yarn install
+# Compile sources and launch the app
+yarn watch
 ```
 
-Note: If you're using Linux Bash for Windows, [see this guide](https://www.howtogeek.com/261575/how-to-run-graphical-linux-desktop-applications-from-windows-10s-bash-shell/) or use `node` from the command prompt.
+## Important files
 
-## Resources for Learning Electron
+- `src/static/main.js` - Starts the app and creates a browser window to render HTML. This is the app's **main process**.
+- `src/static/index.html` - A web page to render. This is the app's **renderer process**.
+- `src/static/ports.js` - JS code which initializes and communicates with Elm app (performs some side-effects like App state saving)
+- `src/static/base.css` - CSS styles for the App
+- `src/elm/Main.elm` - Main App module source code
 
-- [electron.atom.io/docs](http://electron.atom.io/docs) - all of Electron's documentation
-- [electron.atom.io/community/#boilerplates](http://electron.atom.io/community/#boilerplates) - sample starter apps created by the community
-- [electron/electron-quick-start](https://github.com/electron/electron-quick-start) - a very basic starter Electron app
-- [electron/simple-samples](https://github.com/electron/simple-samples) - small applications with ideas for taking them further
-- [electron/electron-api-demos](https://github.com/electron/electron-api-demos) - an Electron app that teaches you how to use Electron
-- [hokein/electron-sample-apps](https://github.com/hokein/electron-sample-apps) - small demo apps for the various Electron APIs
+## Testing
 
-## License
+[`elm-test`](https://github.com/elm-community/elm-test) is used for unit testing the main Elm app.
+```bash
+# Install 'elm-test' globally
+yarn global add elm-test
+# Launch tests
+elm-test
+```
 
-[CC0 1.0 (Public Domain)](LICENSE.md)
+
+## Build
+### Mac app build
+```bash
+yarn build:mac
+```
+and Mac app will be built into `dist/ClockCard-darwin-x64` directory.
+
+## Roadmap
+Roadmap is described in [ROADMAP.md](ROADMAP.md) file
