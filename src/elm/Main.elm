@@ -1,7 +1,13 @@
+port module Main exposing (main)
+
 import Time exposing (Time)
 import Html exposing (Html, div)
-import Stopwatch
+import Stopwatch exposing (Msg(..))
 import IssueList exposing (..)
+import Json.Encode exposing (Value, int)
+import Json.Decode exposing (Decoder, field, decodeValue)
+
+port save : Value -> Cmd msg
 
 type Msg = StopwatchMsg Stopwatch.Msg | IssueListMsg IssueList.Msg
 
@@ -15,6 +21,8 @@ type alias Issue =
     , name: String
     , stopwatch: Stopwatch.Model
     }
+
+type alias Flags = Value
 
 getCurrentStopwatch : Model -> Stopwatch.Model
 getCurrentStopwatch model =
@@ -30,6 +38,20 @@ view model =
         , Html.map StopwatchMsg (Stopwatch.view (getCurrentStopwatch model))
         ]
 
+normalizeState : Model -> Value
+normalizeState model =
+    Json.Encode.object
+        [ ("version", int 1)
+        , ("issues", IssueList.normalize model.issues)
+        ]
+
+decoder : Decoder Model
+decoder =
+    Json.Decode.map Model
+        <| field "issues" IssueList.decoder
+
+saveNormalized model =
+    model |> normalizeState |> save
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
@@ -38,29 +60,37 @@ update msg model =
             let
                 (updatedIssues, cmd) = IssueList.update msg model.issues
                 wrappedCmd = Cmd.map IssueListMsg cmd
+                updatedModel = { model | issues = updatedIssues }
             in
-                ({ model | issues = updatedIssues }
+                ( updatedModel
                 , case msg of
                     IssueList.SelectIssue _ -> Cmd.batch [ wrappedCmd, Cmd.map StopwatchMsg Stopwatch.refresh ]
+                    IssueList.NewIssue -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
                     _ -> wrappedCmd
                 )
 
         StopwatchMsg msg ->
             let
-                currentStopwatch = model.issues
                 selectedIssue = IssueList.getSelectedIssue model.issues
                 (updatedStopwatch, cmd) = Stopwatch.update msg (getCurrentStopwatch model)
+                wrappedCmd = Cmd.map StopwatchMsg cmd
+                updatedModel = { model | issues = updateSelectedIssue model.issues ({ selectedIssue | stopwatch = updatedStopwatch }) }
             in
-                ({ model | issues = updateSelectedIssue model.issues ({ selectedIssue | stopwatch = updatedStopwatch }) }
-                , Cmd.map StopwatchMsg cmd
+                ( updatedModel
+                , case msg of
+                    Stopwatch.ReadyToStart _ -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
+                    Stopwatch.ReadyToPause _ -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
+                    _ -> wrappedCmd
                 )
-
-init =
-    ({ issues = IssueList.init}
+init : Flags -> (Model, Cmd Msg)
+init flags =
+    ( case decodeValue decoder flags of
+        Ok model -> model
+        Err _ -> { issues = IssueList.init }
     , Cmd.none
     )
 
-main = Html.program
+main = Html.programWithFlags
     { init = init
     , view = view
     , update = update

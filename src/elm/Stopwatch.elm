@@ -1,10 +1,12 @@
-module Stopwatch exposing (Model(..), Msg, blank, update, view, subscriptions, refresh)
+module Stopwatch exposing (Model(..), Msg(..), blank, update, view, subscriptions, refresh, normalize, decoder)
 
-import Time exposing (Time, second)
+import Time exposing (Time, second, inSeconds)
 import Task exposing (perform)
 import Html exposing (Html, div, text, button)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onClick)
+import Json.Encode exposing (Value)
+import Json.Decode exposing (Decoder, field, index, map2, float, bool, list, andThen)
 
 type Msg = StartRequested
          | ReadyToStart Time
@@ -113,3 +115,93 @@ formatZero number = if number < 10 then "0" ++ toString number else toString num
 
 refresh : Cmd Msg
 refresh = Task.perform Tick Time.now
+
+-- NORMALIZE / DECODE PART START
+
+normalizePeriods : Periods -> Value
+normalizePeriods periods =
+    periods
+        |> List.map normalizePeriod
+        |> Json.Encode.list
+
+normalizePeriod : Period -> Value
+normalizePeriod (start, end) =
+    Json.Encode.list [Json.Encode.float start, Json.Encode.float end]
+
+normalize : Model -> Value
+normalize model =
+    Json.Encode.object (
+        case model of
+            RunningStopwatch data ->
+                [ ("running", Json.Encode.bool True)
+                , ("currentPeriodStartTime", Json.Encode.float data.currentPeriodStartTime)
+                , ("periods", normalizePeriods data.periods)
+                ]
+
+            PausedStopwatch data ->
+                [ ("running", Json.Encode.bool False)
+                , ("periods", normalizePeriods data.periods)
+                ]
+    )
+
+periodDecoder = Json.Decode.map2 (,) (index 0 float) (index 1 float)
+
+decoder : Decoder Model
+decoder = field "running" bool
+    |> andThen
+        (\running ->
+            case running of
+                True -> runningStopwatchDecoder
+                False -> pausedStopwatchDecoder
+        )
+
+periodToTicks (start, end) = timeDiffInSecs end start
+periodsToTicks periods = List.foldl (\period ticks -> ticks + (periodToTicks period)) 0 periods
+
+runningStopwatchDecoder : Decoder Model
+runningStopwatchDecoder = Json.Decode.map2
+    (\currentPeriodStartTime periods ->
+        RunningStopwatch
+            { currentPeriodStartTime = currentPeriodStartTime
+            , periods = periods
+            , cumulatedTicks = periodsToTicks periods
+            , currentTime = 0
+            }
+    )
+    (field "currentPeriodStartTime" float)
+    (field "periods" (list periodDecoder))
+
+pausedStopwatchDecoder : Decoder Model
+pausedStopwatchDecoder = Json.Decode.map
+    (\periods ->
+        PausedStopwatch
+            { cumulatedTicks = periodsToTicks periods
+            , periods = periods
+            }
+    )
+    (field "periods" (list periodDecoder))
+
+--    let
+--        periodDecoder = Json.Decode.map2 (,) (index 0 float) (index 1 float)
+--        running = at [ "running" ] bool normalizedModel |> decodeValue
+--        currentPeriodStartTime = at [ "currentPeriodStartTime" ] float normalizedModel |> decodeValue
+--        periods = at [ "periods" ] (list periodDecoder) |> decodeValue
+--        periodToTicks (start, end) = timeDiffInSecs end start
+--        periodsToTicks periods = List.foldl (\ticks period -> ticks + (periodToTicks period)) 0 periods
+--    in
+--        case (running, currentPeriodStartTime, periods) of
+--            (Ok True, Ok currentPeriodStartTime, Ok periods) ->
+--                Just RunningStopwatch
+--                    { currentPeriodStartTime = currentPeriodStartTime
+--                    , periods = periods
+--                    , cummulatedTicks = periodsToTicks periods
+--                    , currentTime = 0
+--                    }
+--
+--            (Ok False, Err _, Ok periods) ->
+--                Just PausedStopwatch
+--                    { periods = periods
+--                    , cummulatedTicks = periodsToTicks periods
+--                    }
+--
+--            _ -> Nothing

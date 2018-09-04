@@ -1,4 +1,4 @@
-module IssueList exposing (Model, Msg(..), init, update, view, getSelectedIssue, updateSelectedIssue)
+module IssueList exposing (Model, Msg(..), init, update, view, getSelectedIssue, updateSelectedIssue, normalize, decoder)
 
 import Html exposing (Html, div, text, input)
 import Html.Attributes exposing (classList, class, type_, id, placeholder)
@@ -6,6 +6,9 @@ import Html.Events exposing (onClick, onInput, onBlur)
 import Html.Events.Extra exposing (onEnter)
 import Dom exposing (focus)
 import Task exposing (attempt)
+import Json.Encode exposing (Value, object)
+import Json.Decode exposing (Decoder, field, int)
+import Maybe.Extra exposing (combine)
 
 import SelectableList exposing (..)
 import Issue exposing (Model, IssueId)
@@ -147,3 +150,21 @@ getSelectedIssue model = SelectableList.selected model.list
 updateSelectedIssue : Model -> Issue.Model -> Model
 updateSelectedIssue model updatedIssue =
     { model | list = SelectableList.mapSelected (\_ -> updatedIssue) model.list }
+
+normalize : Model -> Value
+normalize model =
+    object
+        [ ("list", (SelectableList.normalize Issue.normalize model.list))
+        , ("currentId", (Json.Encode.int model.currentId))
+        ]
+
+decoder : Decoder Model
+decoder = Json.Decode.map2
+    (\list currentId ->
+        { list = list
+        , currentId = currentId
+        , newIssueName = Nothing
+        }
+    )
+    (field "list" (SelectableList.decoder Issue.decoder))
+    (field "currentId" int)
