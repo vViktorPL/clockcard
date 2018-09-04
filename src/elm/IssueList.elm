@@ -8,7 +8,6 @@ import Dom exposing (focus)
 import Task exposing (attempt)
 import Json.Encode exposing (Value, object)
 import Json.Decode exposing (Decoder, field, int)
-import Maybe.Extra exposing (combine)
 
 import SelectableList exposing (..)
 import Issue exposing (Model, IssueId)

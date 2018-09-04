@@ -180,28 +180,3 @@ pausedStopwatchDecoder = Json.Decode.map
             }
     )
     (field "periods" (list periodDecoder))
-
---    let
---        periodDecoder = Json.Decode.map2 (,) (index 0 float) (index 1 float)
---        running = at [ "running" ] bool normalizedModel |> decodeValue
---        currentPeriodStartTime = at [ "currentPeriodStartTime" ] float normalizedModel |> decodeValue
---        periods = at [ "periods" ] (list periodDecoder) |> decodeValue
---        periodToTicks (start, end) = timeDiffInSecs end start
---        periodsToTicks periods = List.foldl (\ticks period -> ticks + (periodToTicks period)) 0 periods
---    in
---        case (running, currentPeriodStartTime, periods) of
---            (Ok True, Ok currentPeriodStartTime, Ok periods) ->
---                Just RunningStopwatch
---                    { currentPeriodStartTime = currentPeriodStartTime
---                    , periods = periods
---                    , cummulatedTicks = periodsToTicks periods
---                    , currentTime = 0
---                    }
---
---            (Ok False, Err _, Ok periods) ->
---                Just PausedStopwatch
---                    { periods = periods
---                    , cummulatedTicks = periodsToTicks periods
---                    }
---
---            _ -> Nothing

@@ -87,7 +87,7 @@ init flags =
     ( case decodeValue decoder flags of
         Ok model -> model
         Err _ -> { issues = IssueList.init }
-    , Cmd.none
+    , Cmd.map StopwatchMsg Stopwatch.refresh
     )
 
 main = Html.programWithFlags

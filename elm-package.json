@@ -1,7 +1,7 @@
 {
     "version": "1.0.0",
     "summary": "ClockCard - Desktop time tracking app",
-    "repository": "https://bitbucket.org/vViktor/clockcard",
+    "repository": "https://github.com/vviktorpl/clockcard.git",
     "license": "MIT",
     "source-directories": [
         "src/elm"
