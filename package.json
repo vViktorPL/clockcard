@@ -22,7 +22,7 @@
   "license": "MIT",
   "devDependencies": {
     "chokidar-cli": "^1.2.0",
-    "electron": "~1.7.8",
+    "electron": "~1.8.x",
     "electron-packager": "^12.1.1",
     "elm": "^0.18.0",
     "elm-test": "^0.18.13-beta"
