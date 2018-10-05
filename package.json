@@ -11,7 +11,7 @@
     "test": "elm-test",
     "build:mac": "electron-packager . ClockCard --platform=darwin --icon=assets/icons/256x256.icns --out dist --overwrite"
   },
-  "repository": "https://bitbucket.org/vViktor/clockcard",
+  "repository": "https://github.com/vViktorPL/clockcard.git",
   "keywords": [
     "Electron",
     "elm",
