@@ -24,8 +24,8 @@
     "chokidar-cli": "^1.2.0",
     "electron": "~1.8.x",
     "electron-packager": "^12.1.1",
-    "elm": "^0.18.0",
-    "elm-test": "^0.18.13-beta"
+    "elm": "^0.19.0-bugfix2",
+    "elm-test": "^0.19.0-beta12"
   },
   "dependencies": {}
 }
