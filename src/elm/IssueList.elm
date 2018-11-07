@@ -53,9 +53,7 @@ view model =
         )
 
 isIssueRunning : Issue.Model -> Bool
-isIssueRunning issue = case issue.stopwatch of
-    Stopwatch.RunningStopwatch _ -> True
-    Stopwatch.PausedStopwatch _ -> False
+isIssueRunning issue = Stopwatch.isRunning issue.stopwatch
 
 viewIssues : SelectableList Issue.Model -> List (Html Msg)
 viewIssues issueList = issueList

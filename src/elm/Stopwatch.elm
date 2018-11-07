@@ -1,4 +1,17 @@
-module Stopwatch exposing (Model(..), Msg(..), blank, update, view, subscriptions, refresh, normalize, decoder)
+module Stopwatch exposing
+    ( Model
+    , Msg
+    , blank
+    , update
+    , view
+    , subscriptions
+    , refresh
+    , normalize
+    , decoder
+    , Period
+    , stateSaveAdvised
+    , isRunning
+    )
 
 import Time exposing (Time, second, inSeconds)
 import Task exposing (perform)
@@ -180,3 +193,16 @@ pausedStopwatchDecoder = Json.Decode.map
             }
     )
     (field "periods" (list periodDecoder))
+
+stateSaveAdvised : Msg -> Bool
+stateSaveAdvised msg =
+    case msg of
+        ReadyToPause _ -> True
+        ReadyToStart _ -> True
+        _ -> False
+
+isRunning : Model -> Bool
+isRunning stopwatch =
+    case stopwatch of
+        RunningStopwatch _ -> True
+        PausedStopwatch _ -> False

@@ -2,7 +2,7 @@ port module Main exposing (main)
 
 import Time exposing (Time)
 import Html exposing (Html, div)
-import Stopwatch exposing (Msg(..))
+import Stopwatch exposing (Msg)
 import IssueList exposing (..)
 import Json.Encode exposing (Value, int)
 import Json.Decode exposing (Decoder, field, decodeValue)
@@ -77,10 +77,9 @@ update msg model =
                 updatedModel = { model | issues = updateSelectedIssue model.issues ({ selectedIssue | stopwatch = updatedStopwatch }) }
             in
                 ( updatedModel
-                , case msg of
-                    Stopwatch.ReadyToStart _ -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
-                    Stopwatch.ReadyToPause _ -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
-                    _ -> wrappedCmd
+                , case Stopwatch.stateSaveAdvised msg of
+                    True -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
+                    False -> wrappedCmd
                 )
 init : Flags -> (Model, Cmd Msg)
 init flags =
