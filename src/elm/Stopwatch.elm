@@ -128,14 +128,10 @@ view model =
         ]
 
 
-subscriptions : Model -> Sub Msg
-subscriptions model =
-    case model of
-        RunningStopwatch _ ->
-            Time.every 1000 Tick
-
-        PausedStopwatch _ ->
-            Sub.none
+subscriptions : Sub Msg
+subscriptions =
+    -- Conditional subscriptions removed for now due to some Elm 0.19 issue https://github.com/elm/compiler/issues/1776
+    Time.every 1000 Tick
 
 
 timeDiffInSecs : Time -> Time -> Int

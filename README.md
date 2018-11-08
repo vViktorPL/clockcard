@@ -40,12 +40,9 @@ yarn watch
 
 ## Testing
 
-[`elm-test`](https://github.com/elm-community/elm-test) is used for unit testing the main Elm app.
+[`elm-explorations/test`](https://package.elm-lang.org/packages/elm-explorations/test/latest/) package is used for unit testing the main Elm app.
 ```bash
-# Install 'elm-test' globally
-yarn global add elm-test
-# Launch tests
-elm-test
+yarn test
 ```
 
 

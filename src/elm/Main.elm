@@ -2,6 +2,7 @@ port module Main exposing (main)
 
 import Browser
 import Html exposing (Html, div)
+import Html.Attributes exposing (id)
 import IssueList exposing (..)
 import Json.Decode exposing (Decoder, decodeValue, field)
 import Json.Encode exposing (Value, int)
@@ -46,7 +47,7 @@ getCurrentStopwatch model =
 view : Model -> Html Msg
 view model =
     div
-        []
+        [ id "container" ]
         [ Html.map IssueListMsg (IssueList.view model.issues)
         , Html.map StopwatchMsg (Stopwatch.view (getCurrentStopwatch model))
         ]
@@ -137,5 +138,5 @@ main =
         { init = init
         , view = view
         , update = update
-        , subscriptions = \model -> Sub.map StopwatchMsg (Stopwatch.subscriptions (getCurrentStopwatch model))
+        , subscriptions = \model -> Sub.map StopwatchMsg Stopwatch.subscriptions
         }
