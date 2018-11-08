@@ -1,10 +1,13 @@
 'use strict';
 
-const Elm = require('./elm.js');
+const { Elm: { Main: ElmApp } } = require('./elm.js');
 const initialState = localStorage.getItem('state');
 
 let container = document.getElementById('container');
-let app = Elm.Main.embed(container, initialState ? JSON.parse(initialState) : null);
+let app = ElmApp.init({
+  node: container,
+  flags: initialState ? JSON.parse(initialState) : null,
+});
 
 app.ports.save.subscribe(
   stateModel => {
