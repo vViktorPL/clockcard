@@ -9,7 +9,7 @@
     "elm:watch": "chokidar 'src/**/*.elm' -c 'yarn elm'",
     "watch": "yarn start & yarn elm:watch & wait",
     "test": "elm-test",
-    "build:mac": "electron-packager . ClockCard --platform=darwin --icon=assets/icons/256x256.icns --out dist --overwrite"
+    "build:mac": "elm make ./src/elm/Main.elm --output ./src/static/elm.js --optimize && electron-packager . ClockCard --platform=darwin --icon=assets/icons/256x256.icns --out dist --overwrite"
   },
   "repository": "https://github.com/vViktorPL/clockcard.git",
   "keywords": [
