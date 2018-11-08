@@ -21,7 +21,7 @@ with some JavaScript when performing such tasks through Elm's builtin [Ports](ht
 ## Development
 ```bash
 # Clone this repository
-git clone git@bitbucket.org:vViktor/clockcard.git
+git clone git@github.com:vViktorPL/clockcard.git
 # Go into the repository
 cd clockcard
 # Install dependencies

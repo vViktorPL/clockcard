@@ -4,7 +4,7 @@
   "description": "Desktop time tracking app",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "yarn elm && electron .",
     "elm": "elm make ./src/elm/Main.elm --output ./src/static/elm.js || true",
     "elm:watch": "chokidar 'src/**/*.elm' -c 'yarn elm'",
     "watch": "yarn start & yarn elm:watch & wait",
