@@ -38,6 +38,8 @@ function createWindow () {
     // when you should delete the corresponding element.
     mainWindow = null;
   })
+
+  electron.Menu.setApplicationMenu(require('./menu')(mainWindow));
 }
 
 // This method will be called when Electron has finished

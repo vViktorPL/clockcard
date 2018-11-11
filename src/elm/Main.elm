@@ -4,9 +4,10 @@ import Browser
 import Html exposing (Html, div)
 import Html.Attributes exposing (id)
 import IssueList exposing (..)
-import Json.Decode exposing (Decoder, decodeValue, field)
+import Json.Decode exposing (Decoder, decodeValue, field, at)
 import Json.Encode exposing (Value, int)
 import Stopwatch exposing (Msg)
+import Integrations.Jira
 
 
 port save : Value -> Cmd msg
@@ -15,10 +16,12 @@ port save : Value -> Cmd msg
 type Msg
     = StopwatchMsg Stopwatch.Msg
     | IssueListMsg IssueList.Msg
+    | JIRAIntegrationMsg Integrations.Jira.Msg
 
 
 type alias Model =
     { issues : IssueList.Model
+    , jiraIntegration : Integrations.Jira.Model
     }
 
 
@@ -50,6 +53,7 @@ view model =
         [ id "container" ]
         [ Html.map IssueListMsg (IssueList.view model.issues)
         , Html.map StopwatchMsg (Stopwatch.view (getCurrentStopwatch model))
+        , Html.map JIRAIntegrationMsg (Integrations.Jira.view model.jiraIntegration)
         ]
 
 
@@ -58,13 +62,20 @@ normalizeState model =
     Json.Encode.object
         [ ( "version", int 1 )
         , ( "issues", IssueList.normalize model.issues )
+        , ( "integrations",
+            Json.Encode.object
+                [ ( "jira", Integrations.Jira.normalize model.jiraIntegration )
+                ]
+
+          )
         ]
 
 
 decoder : Decoder Model
 decoder =
-    Json.Decode.map Model <|
-        field "issues" IssueList.decoder
+    Json.Decode.map2 Model
+        ( field "issues" IssueList.decoder )
+        ( at ["integrations", "jira"] Integrations.Jira.decoder)
 
 
 saveNormalized model =
@@ -120,6 +131,18 @@ update msg model =
                     wrappedCmd
             )
 
+        JIRAIntegrationMsg submsg ->
+            let
+                ( jiraModel, jiraCmd)  = (Integrations.Jira.update submsg model.jiraIntegration)
+                wrappedCmd = Cmd.map JIRAIntegrationMsg jiraCmd
+                updatedModel = { model | jiraIntegration = jiraModel }
+            in
+                ( updatedModel
+                , case Integrations.Jira.stateSaveAdvised submsg of
+                    True -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
+                    False -> wrappedCmd
+                )
+
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
@@ -128,7 +151,9 @@ init flags =
             model
 
         Err _ ->
-            { issues = IssueList.init }
+            { issues = IssueList.init
+            , jiraIntegration = Integrations.Jira.init
+            }
     , Cmd.map StopwatchMsg Stopwatch.refresh
     )
 
@@ -138,5 +163,10 @@ main =
         { init = init
         , view = view
         , update = update
-        , subscriptions = \model -> Sub.map StopwatchMsg Stopwatch.subscriptions
+        , subscriptions =
+            \model ->
+                Sub.batch
+                    [ (Sub.map StopwatchMsg Stopwatch.subscriptions)
+                    , (Sub.map JIRAIntegrationMsg (Integrations.Jira.subscriptions model.jiraIntegration))
+                    ]
         }

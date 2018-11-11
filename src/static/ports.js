@@ -1,5 +1,7 @@
 'use strict';
 
+const { ipcRenderer } = require('electron');
+
 const { Elm: { Main: ElmApp } } = require('./elm.js');
 const initialState = localStorage.getItem('state');
 
@@ -15,3 +17,7 @@ app.ports.save.subscribe(
     localStorage.setItem('state', JSON.stringify(stateModel));
   }
 );
+
+ipcRenderer.on('menu-jira-clicked', () => {
+  app.ports.showJIRAManager.send(null);
+});

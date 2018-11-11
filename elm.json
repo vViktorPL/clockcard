@@ -10,11 +10,15 @@
             "elm/core": "1.0.0",
             "elm/html": "1.0.0",
             "elm/json": "1.0.0",
-            "elm/time": "1.0.0"
+            "elm/time": "1.0.0",
+            "vViktorPL/elm-jira-connector": "1.0.2"
         },
         "indirect": {
+            "elm/http": "1.0.0",
+            "elm/regex": "1.0.0",
             "elm/url": "1.0.0",
-            "elm/virtual-dom": "1.0.2"
+            "elm/virtual-dom": "1.0.2",
+            "truqu/elm-base64": "2.0.4"
         }
     },
     "test-dependencies": {
