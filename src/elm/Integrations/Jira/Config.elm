@@ -1,13 +1,15 @@
-port module Integrations.Jira exposing
+port module Integrations.Jira.Config exposing
     ( Model
     , Msg
     , decoder
     , init
     , normalize
     , stateSaveAdvised
-    , subscriptions
     , update
     , view
+    , ProjectData
+    , getValidDestinations
+    , ValidDestination
     )
 
 import Html exposing (Html, div, form)
@@ -18,16 +20,18 @@ import Json.Decode exposing (Decoder, bool, field, keyValuePairs, list, map3, nu
 import Json.Encode as E
 import SelectableList exposing (SelectableList)
 import Task
+import Time exposing (Posix)
+import Assets exposing (getImageUrl)
 
-
-port showJIRAManager : (() -> msg) -> Sub msg
-
+type alias Seconds = Int
 
 type Validity
     = Valid
     | Checking
     | Invalid
 
+
+type alias ValidDestination = ( String, Jira.Api.Cred )
 
 type alias Destination =
     { name : String
@@ -55,9 +59,7 @@ type DestinationUpdateMsg
 
 
 type Msg
-    = ShowManager
-    | HideManager
-    | NewDestination
+    = NewDestination
     | SelectDestination Destination
     | DestinationUpdate DestinationUpdateMsg
     | ValidateDestination
@@ -66,18 +68,12 @@ type Msg
 
 type alias Model =
     { destinations : Maybe (SelectableList Destination)
-    , managerVisible : Bool
     }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        ShowManager ->
-            ( { model | managerVisible = True }, Cmd.none )
-
-        HideManager ->
-            ( { model | managerVisible = False }, Cmd.none )
 
         SelectDestination destination ->
             ( selectDestination model destination, Cmd.none )
@@ -197,44 +193,29 @@ updateSelectedDestination msg model =
 
 view : Model -> Html Msg
 view model =
-    div
-        [ classList
-            [ ( "manager-window", True )
-            , ( "hidden", not model.managerVisible )
-            ]
-        ]
-        ([ viewTitlebar ]
-            ++ (case model.destinations of
-                    Just selectableList ->
-                        [ div [ class "manager-window__destinations-list" ]
-                            (let
-                                isSelected =
-                                    \destination -> SelectableList.isSelected destination selectableList
-                             in
-                             selectableList
-                                |> SelectableList.map (\destination -> viewDestination destination (isSelected destination))
-                                |> SelectableList.getItems
-                            )
-                        , div [ class "manager-window__current-destination-form" ]
-                            [ viewDestinationForm (SelectableList.getSelected selectableList) ]
-                        ]
+    (case model.destinations of
+        Just selectableList ->
+            div []
+                [ div [ class "manager-window__destinations-list" ]
+                    (let
+                        isSelected =
+                            \destination -> SelectableList.isSelected destination selectableList
+                     in
+                     selectableList
+                        |> SelectableList.map (\destination -> viewDestination destination (isSelected destination))
+                        |> SelectableList.getItems
+                    )
+                , div [ class "manager-window__current-destination-form" ]
+                    [ viewDestinationForm (SelectableList.getSelected selectableList) ]
+                ]
 
-                    Nothing ->
-                        [ Html.text "No JIRA destinations added. "
-                        , Html.a [ onClick NewDestination ] [ Html.text "You can add one" ]
-                        , Html.text "."
-                        ]
-               )
-        )
-
-
-viewTitlebar : Html Msg
-viewTitlebar =
-    div [ class "manager-window__titlebar" ] [ Html.text "JIRA integration manager", viewCloseButton ]
-
-
-viewCloseButton =
-    div [ onClick HideManager, class "manager-window__close-button" ] [ Html.text "✕" ]
+        Nothing ->
+            div []
+                [ Html.text "No JIRA destinations added. "
+                , Html.a [ onClick NewDestination ] [ Html.text "You can add one" ]
+                , Html.text "."
+                ]
+    )
 
 
 viewDestination : Destination -> Bool -> Html Msg
@@ -242,11 +223,10 @@ viewDestination destination isSelected =
     div [ classList [ ( "selected", isSelected ) ] ]
         [ Html.text
             (destination.name
-                ++ (if destination.valid == Valid then
-                        " ✅"
-
-                    else
-                        ""
+                ++ (case destination.valid of
+                        Valid -> " ✅"
+                        Checking -> " ⌛"
+                        Invalid -> " ❌"
                    )
             )
         , Html.span []
@@ -326,15 +306,9 @@ viewDestinationForm destination =
         ]
 
 
-subscriptions : Model -> Sub Msg
-subscriptions model =
-    showJIRAManager (\_ -> ShowManager)
-
-
 init : Model
 init =
     { destinations = Nothing
-    , managerVisible = False
     }
 
 
@@ -342,9 +316,6 @@ stateSaveAdvised : Msg -> Bool
 stateSaveAdvised msg =
     case msg of
         DestinationValidated _ ->
-            True
-
-        HideManager ->
             True
 
         _ ->
@@ -363,9 +334,8 @@ normalize model =
 
 decoder : Decoder Model
 decoder =
-    Json.Decode.map2 Model
+    Json.Decode.map Model
         (nullable (SelectableList.decoder destinationDecoder))
-        (Json.Decode.succeed False)
 
 
 normalizeDestination : Destination -> E.Value
@@ -442,3 +412,22 @@ validDecoder =
                 else
                     Invalid
             )
+
+destinationToCred : Destination -> Result String Jira.Api.Cred
+destinationToCred destination =
+    Jira.Api.createBasicAuthCred destination.host ( destination.authUsername, destination.authPassword )
+
+getValidDestinations : Model -> List ValidDestination
+getValidDestinations model =
+    model.destinations
+        |> Maybe.map SelectableList.getItems
+        |> Maybe.map
+            ( List.filterMap
+                ( \destination ->
+                    case (destination.valid, destinationToCred destination) of
+                        (Valid, Ok cred) -> Just (destination.name, cred)
+                        _ -> Nothing
+                )
+            )
+        |> Maybe.withDefault []
+

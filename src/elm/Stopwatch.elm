@@ -11,6 +11,7 @@ module Stopwatch exposing
     , subscriptions
     , update
     , view
+    , getFinishedPeriods
     )
 
 import Html exposing (Html, button, div, text)
@@ -293,3 +294,9 @@ isRunning stopwatch =
 
         PausedStopwatch _ ->
             False
+
+getFinishedPeriods : Model -> Periods
+getFinishedPeriods stopwatch =
+    case stopwatch of
+       RunningStopwatch stopwatchData -> stopwatchData.periods
+       PausedStopwatch stopwatchData -> stopwatchData.periods

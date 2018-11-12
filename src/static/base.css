@@ -188,6 +188,22 @@ body {
     border-right: WindowFrame 1px solid;
 }
 
+.manager-window__destinations-list > div > span {
+    display: block;
+    font-style: italic;
+    font-size: 10px;
+}
+
+.manager-window__destinations-list > div {
+    padding: 5px;
+    cursor: pointer;
+}
+
+.manager-window__destinations-list > div.selected {
+    background-color: Highlight;
+    color: HighlightText;
+}
+
 .manager-window__current-destination-form {
     padding: 10px;
 }

@@ -19,5 +19,5 @@ app.ports.save.subscribe(
 );
 
 ipcRenderer.on('menu-jira-clicked', () => {
-  app.ports.showJIRAManager.send(null);
+  app.ports.showJiraManager.send(null);
 });

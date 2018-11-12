@@ -1,0 +1,33 @@
+module Integrations.Jira.Log exposing (..)
+
+--import Html exposing (Html)
+--import Html.Attributes
+--import Time exposing (Posix)
+--
+--import Assets exposing (getImageUrl)
+--import Integrations.Jira.Config
+--
+--
+--type alias Seconds = Int
+--
+--
+type LogRef = LogRef Int
+--
+--type LogRefMsg = OpenLogRef LogRef
+--
+--type alias Model =
+--    { id: LogRef
+--    , issueKey: String
+--    , issueUrl: String
+--    , loggedTime: Seconds
+--    , commitTime: Posix
+--    }
+--
+--
+--
+--viewLogRef : LogRef -> Html LogRefMsg
+--viewLogRef logRef =
+--    Html.div []
+--        [ Html.img [Html.Attributes.src (getImageUrl "jira-icon.svg")] []
+--        , Html.text ("#" ++ logRef)
+--        ]
