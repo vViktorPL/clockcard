@@ -1,4 +1,4 @@
-module Timesheet exposing (Msg, Model, Period, startPeriod, cancelPeriod, addPeriod, update, view, init, decoder, encode, getCurrentlyRunningPeriodStart)
+module Timesheet exposing (Msg, Model, Period, update, view, init, decoder, encode, getCurrentlyRunningPeriodStart)
 
 import Time exposing (Posix)
 import Html exposing (Html)
@@ -10,9 +10,14 @@ import Json.Decode as D exposing (Decoder)
 import Html.Events exposing (onClick)
 import Integrations exposing (LogRef)
 import Stopwatch
+import Task
 
 type Msg
     = SwitchTab Tab
+    | StartNewPeriodRequested
+    | StartNewPeriod Posix
+    | EndCurrentPeriodRequested
+    | EndCurrentPeriod Posix
 
 type Period = Period Posix Posix (List LogRef)
 
@@ -29,9 +34,17 @@ type alias TimesheetData =
     }
 
 update : Msg -> Model -> (Model, Cmd Msg)
-update msg (Timesheet model) =
+update msg model =
     case msg of
-        SwitchTab tab -> ( Timesheet { model | currentTab = tab }, Cmd.none )
+        SwitchTab tab -> (switchTab model tab, Cmd.none)
+        StartNewPeriodRequested -> ( model, Task.perform StartNewPeriod Time.now )
+        StartNewPeriod startTime -> (Maybe.withDefault model (startPeriod model startTime), Cmd.none)
+        EndCurrentPeriodRequested -> ( model, Task.perform EndCurrentPeriod Time.now )
+        EndCurrentPeriod endTime -> (Maybe.withDefault model (addPeriod model endTime), Cmd.none)
+
+switchTab : Model -> Tab -> Model
+switchTab (Timesheet model) tab =
+    Timesheet { model | currentTab = tab }
 
 init : Model
 init =
@@ -53,7 +66,14 @@ view : Model -> Posix -> Html Msg
 view (Timesheet model) currentTime =
     Html.div []
         [ Html.div [ class "stopwatch" ]
-            [ Stopwatch.view (stopwatch model.periodInProgress model.cumulatedTicks) currentTime ]
+            [ Stopwatch.view (stopwatch model.periodInProgress model.cumulatedTicks) currentTime
+            , Html.div [ class "stopwatch__controls" ]
+                [ case model.periodInProgress of
+                    Nothing -> Html.button [ onClick StartNewPeriodRequested ] [ Html.text "Start ▶" ]
+                    Just _ -> Html.button [ onClick EndCurrentPeriodRequested ] [ Html.text "❚❚ Pause" ]
+                ]
+
+            ]
         , Html.div [ class "timesheet" ]
             [ Html.div []
                 [ Html.div [ onClick (SwitchTab PeriodsTab) ] [ Html.text "Periods" ]
@@ -98,7 +118,6 @@ getCurrentlyRunningPeriodStart : Model -> Maybe Posix
 getCurrentlyRunningPeriodStart (Timesheet model) = model.periodInProgress
 
 
-
 duration : Posix -> Posix -> Int
 duration start end =
      ((Time.posixToMillis end) - (Time.posixToMillis start)) // 1000
@@ -112,7 +131,7 @@ durationHumanReadable start end =
         secs = totalSecs - (hours * 3600) - (minutes * 60)
     in
         [ (hours, "h"), (minutes, "m"), (secs, "s") ]
-            |> List.filter (Tuple.first >> (>) 0)
+            |> List.filter (\(count, _) -> count > 0)
             |> List.map (\(count, unit) -> String.fromInt count ++ unit)
             |> String.join " "
 
