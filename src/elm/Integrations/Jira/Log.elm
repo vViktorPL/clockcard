@@ -1,5 +1,8 @@
 module Integrations.Jira.Log exposing (..)
 
+import Json.Encode exposing (Value)
+import Json.Decode as D exposing (Decoder)
+
 --import Html exposing (Html)
 --import Html.Attributes
 --import Time exposing (Posix)
@@ -31,3 +34,14 @@ type LogRef = LogRef Int
 --        [ Html.img [Html.Attributes.src (getImageUrl "jira-icon.svg")] []
 --        , Html.text ("#" ++ logRef)
 --        ]
+
+encodeLogRef : LogRef -> Value
+encodeLogRef (LogRef logRef) =
+    Json.Encode.object
+        [ ("index", Json.Encode.int logRef)
+        ]
+
+logRefDecoder : Decoder LogRef
+logRefDecoder =
+    D.map LogRef <|
+        D.field "index" D.int

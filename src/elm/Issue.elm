@@ -2,7 +2,7 @@ module Issue exposing (IssueId, Model, decoder, normalize)
 
 import Json.Decode exposing (Decoder, field, int, string)
 import Json.Encode exposing (Value)
-import Stopwatch
+import Timesheet
 
 
 type alias IssueId =
@@ -12,7 +12,7 @@ type alias IssueId =
 type alias Model =
     { id : IssueId
     , name : String
-    , stopwatch : Stopwatch.Model
+    , timesheet : Timesheet.Model
     }
 
 
@@ -21,7 +21,7 @@ normalize model =
     Json.Encode.object
         [ ( "id", Json.Encode.int model.id )
         , ( "name", Json.Encode.string model.name )
-        , ( "stopwatch", Stopwatch.normalize model.stopwatch )
+        , ( "timesheet", Timesheet.encode model.timesheet )
         ]
 
 
@@ -31,4 +31,4 @@ decoder =
         Model
         (field "id" int)
         (field "name" string)
-        (field "stopwatch" Stopwatch.decoder)
+        (field "timesheet" Timesheet.decoder)

@@ -11,10 +11,12 @@
             "elm/html": "1.0.0",
             "elm/json": "1.0.0",
             "elm/time": "1.0.0",
+            "rtfeldman/elm-iso8601-date-strings": "1.1.2",
             "vViktorPL/elm-jira-connector": "1.0.2"
         },
         "indirect": {
             "elm/http": "1.0.0",
+            "elm/parser": "1.1.0",
             "elm/regex": "1.0.0",
             "elm/url": "1.0.0",
             "elm/virtual-dom": "1.0.2",

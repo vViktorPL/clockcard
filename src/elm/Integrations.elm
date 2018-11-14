@@ -1,6 +1,7 @@
 port module Integrations exposing
     ( Configs
     , ConfigsMsg
+    , LogRef
     , viewConfigManagers
     , updateConfigManagers
     , normalizeConfigs
@@ -8,13 +9,15 @@ port module Integrations exposing
     , initConfigs
     , subscriptions
     , configsSaveAdvised
+    , encodeLogRef
+    , logRefDecoder
     )
 
 import Html exposing (Html, div)
 import Html.Attributes exposing (classList, class)
 import Html.Events exposing (onClick)
-import Json.Encode exposing (Value)
-import Json.Decode exposing (Decoder)
+import Json.Encode as E exposing (Value)
+import Json.Decode as D exposing (Decoder)
 
 import Integrations.Jira.Config as JiraConfig
 import Integrations.Jira.Log as JiraLog
@@ -27,8 +30,8 @@ type ConfigsMsg
     = ShowConfigManager ConfigManager
     | JiraConfigMsg JiraConfig.Msg
 
---type LogRef
---    = JiraLogRef JiraLog.LogRef
+type LogRef
+    = JiraLogRef JiraLog.LogRef
 --
 --type LogTable = JiraTab
 
@@ -76,17 +79,17 @@ updateConfigManagers msg (Configs activeManager jiraConfig) =
 
 
 
-normalizeConfigs : Configs -> Value
+normalizeConfigs : Configs ->  Value
 normalizeConfigs (Configs _ jiraConfig) =
-    Json.Encode.object
+    E.object
         [ ("jira", JiraConfig.normalize jiraConfig)
         ]
 
 decodeConfigs : Decoder Configs
 decodeConfigs =
-    Json.Decode.map2 Configs
-        (Json.Decode.succeed None)
-        (Json.Decode.field "jira" JiraConfig.decoder)
+    D.map2 Configs
+        (D.succeed None)
+        (D.field "jira" JiraConfig.decoder)
 
 initConfigs : Configs
 initConfigs =
@@ -115,3 +118,22 @@ configsSaveAdvised msg =
 --        JiraTab ->
 
 
+encodeLogRef : LogRef -> Value
+encodeLogRef logRef =
+    case logRef of
+        JiraLogRef jiraLogRef ->
+            E.object
+                [ ("type", E.string "jira")
+                , ("data", JiraLog.encodeLogRef jiraLogRef)
+                ]
+
+
+logRefDecoder : Decoder LogRef
+logRefDecoder =
+    D.field "type" D.string
+        |> D.andThen
+            ( \integration ->
+                case integration of
+                    "jira" -> D.map JiraLogRef JiraLog.logRefDecoder
+                    _ -> D.fail ("Invalid integration type: " ++ integration)
+            )

@@ -9,8 +9,8 @@ import Issue exposing (IssueId, Model)
 import Json.Decode exposing (Decoder, field, int)
 import Json.Encode exposing (Value, object)
 import SelectableList exposing (..)
-import Stopwatch exposing (Model)
 import Task exposing (attempt)
+import Timesheet
 
 
 type alias Model =
@@ -37,7 +37,7 @@ init =
             , selected =
                 { id = 1
                 , name = "Example issue"
-                , stopwatch = Stopwatch.blank
+                , timesheet = Timesheet.init
                 }
             , tail = []
             }
@@ -57,7 +57,9 @@ view model =
 
 isIssueRunning : Issue.Model -> Bool
 isIssueRunning issue =
-    Stopwatch.isRunning issue.stopwatch
+    case Timesheet.getCurrentlyRunningPeriodStart issue.timesheet of
+        Just _ -> True
+        Nothing -> False
 
 
 viewIssues : SelectableList Issue.Model -> List (Html Msg)
@@ -153,7 +155,7 @@ update msg model =
                         newIssue =
                             { id = model.currentId
                             , name = newIssueName
-                            , stopwatch = Stopwatch.blank
+                            , timesheet = Timesheet.init
                             }
 
                         updatedList =

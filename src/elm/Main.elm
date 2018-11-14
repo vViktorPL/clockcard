@@ -4,24 +4,28 @@ import Browser
 import Html exposing (Html, div)
 import Html.Attributes exposing (id)
 import IssueList exposing (..)
+import Timesheet
 import Json.Decode exposing (Decoder, decodeValue, field, at)
 import Json.Encode exposing (Value, int)
-import Stopwatch exposing (Msg)
+import Time exposing (Posix)
 import Integrations
+import Task
 
 
 port save : Value -> Cmd msg
 
 
 type Msg
-    = StopwatchMsg Stopwatch.Msg
+    = TimesheetMsg Timesheet.Msg
     | IssueListMsg IssueList.Msg
     | IntegrationConfigManagerMsg Integrations.ConfigsMsg
+    | Tick Posix
 
 
 type alias Model =
     { issues : IssueList.Model
     , integrations: Integrations.Configs
+    , currentTime : Posix
     }
 
 
@@ -33,19 +37,18 @@ type alias Flags =
     Value
 
 
-getCurrentStopwatch : Model -> Stopwatch.Model
-getCurrentStopwatch model =
+getCurrentTimesheet : Model -> Timesheet.Model
+getCurrentTimesheet model =
     model.issues
         |> IssueList.getSelectedIssue
-        |> .stopwatch
-
+        |> .timesheet
 
 view : Model -> Html Msg
 view model =
     div
         [ id "container" ]
         [ Html.map IssueListMsg (IssueList.view model.issues)
-        , Html.map StopwatchMsg (Stopwatch.view (getCurrentStopwatch model))
+        , Html.map TimesheetMsg (Timesheet.view (getCurrentTimesheet model) model.currentTime)
         , Html.map IntegrationConfigManagerMsg (Integrations.viewConfigManagers model.integrations)
         ]
 
@@ -61,9 +64,10 @@ normalizeState model =
 
 decoder : Decoder Model
 decoder =
-    Json.Decode.map2 Model
+    Json.Decode.map3 Model
         ( field "issues" IssueList.decoder )
         ( field "integrations" Integrations.decodeConfigs )
+        ( Json.Decode.succeed ( Time.millisToPosix 0 ) )
 
 
 saveNormalized model =
@@ -87,7 +91,7 @@ update msg model =
             ( updatedModel
             , case submsg of
                 IssueList.SelectIssue _ ->
-                    Cmd.batch [ wrappedCmd, Cmd.map StopwatchMsg Stopwatch.refresh ]
+                    Cmd.batch [ wrappedCmd, refreshTime ]
 
                 IssueList.NewIssue ->
                     Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
@@ -96,28 +100,16 @@ update msg model =
                     wrappedCmd
             )
 
-        StopwatchMsg submsg ->
+        Tick time ->
+            ( { model | currentTime = time }, Cmd.none )
+
+        TimesheetMsg submsg ->
             let
-                selectedIssue =
-                    IssueList.getSelectedIssue model.issues
-
-                ( updatedStopwatch, cmd ) =
-                    Stopwatch.update submsg (getCurrentStopwatch model)
-
-                wrappedCmd =
-                    Cmd.map StopwatchMsg cmd
-
-                updatedModel =
-                    { model | issues = updateSelectedIssue model.issues { selectedIssue | stopwatch = updatedStopwatch } }
+                selectedIssue = getSelectedIssue model.issues
+                (updatedTimesheet, cmd) = Timesheet.update submsg selectedIssue.timesheet
+                updatedIssue= { selectedIssue | timesheet = updatedTimesheet }
             in
-            ( updatedModel
-            , case Stopwatch.stateSaveAdvised submsg of
-                True ->
-                    Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
-
-                False ->
-                    wrappedCmd
-            )
+            ( { model | issues = IssueList.updateSelectedIssue model.issues updatedIssue }, Cmd.map TimesheetMsg cmd )
 
         IntegrationConfigManagerMsg submsg ->
             let
@@ -141,9 +133,14 @@ init flags =
         Err _ ->
             { issues = IssueList.init
             , integrations = Integrations.initConfigs
+            , currentTime = Time.millisToPosix 0
             }
-    , Cmd.map StopwatchMsg Stopwatch.refresh
+
+    , refreshTime
     )
+
+refreshTime : Cmd Msg
+refreshTime = Task.perform Tick Time.now
 
 
 main =
@@ -154,7 +151,7 @@ main =
         , subscriptions =
             \model ->
                 Sub.batch
-                    [ (Sub.map StopwatchMsg Stopwatch.subscriptions)
+                    [ (Time.every 1000 Tick)
                     , (Sub.map IntegrationConfigManagerMsg Integrations.subscriptions)
                     ]
         }
