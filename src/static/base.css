@@ -15,6 +15,7 @@ body {
     top: 0;
     right: 0;
     bottom: 0;
+    display: flex;
 }
 
 #container > div {
@@ -26,11 +27,14 @@ body {
     height: 100%;
 }
 
+.selected-item-form {
+    flex: 1;
+}
+
 .issue-list {
+    flex: 0 0 40%;
     box-sizing: border-box;
-    display: inline-block;
     float: left;
-    width: 40%;
     border-right: WindowFrame 1px solid;
     height: 100%;
     font-size: 16px;
@@ -210,4 +214,46 @@ body {
 
 .hidden {
     visibility: hidden;
+}
+
+.timesheet {
+    margin: 10px;
+}
+
+.tabs {
+    text-align: left;
+    margin-bottom: 10px;
+}
+
+.tab {
+    display: inline-block;
+    background: ButtonFace;
+    color: ButtonText;
+    padding: 10px;
+    cursor: pointer;
+}
+
+.tab.active {
+    background: Highlight;
+    color: HighlightText;
+}
+
+.timesheet__tab-content {
+    height: 100%;
+    overflow-y: auto;
+}
+
+table tr.selected td {
+    background-color: Highlight;
+    color: HighlightText;
+}
+
+table tr th {
+    background-color: CaptionText;
+    color: Menu;
+}
+
+table tr td {
+    background-color: Menu;
+    color: CaptionText;
 }

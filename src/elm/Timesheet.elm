@@ -2,7 +2,7 @@ module Timesheet exposing (Msg, Model, Period, update, view, init, decoder, enco
 
 import Time exposing (Posix)
 import Html exposing (Html)
-import Html.Attributes exposing (class)
+import Html.Attributes exposing (class, classList, type_, checked, disabled)
 import Iso8601
 import Json.Encode as E exposing (Value)
 import Json.Decode as D exposing (Decoder)
@@ -18,6 +18,8 @@ type Msg
     | StartNewPeriod Posix
     | EndCurrentPeriodRequested
     | EndCurrentPeriod Posix
+    | TogglePeriodSelection Period
+    | RemoveSelectedPeriods
 
 type Period = Period Posix Posix (List LogRef)
 
@@ -28,7 +30,7 @@ type Model = Timesheet TimesheetData
 
 type alias TimesheetData =
     { currentTab: Tab
-    , finishedPeriods: List Period
+    , finishedPeriods: List (Bool, Period)
     , periodInProgress: Maybe Posix
     , cumulatedTicks: Int
     }
@@ -41,6 +43,8 @@ update msg model =
         StartNewPeriod startTime -> (Maybe.withDefault model (startPeriod model startTime), Cmd.none)
         EndCurrentPeriodRequested -> ( model, Task.perform EndCurrentPeriod Time.now )
         EndCurrentPeriod endTime -> (Maybe.withDefault model (addPeriod model endTime), Cmd.none)
+        TogglePeriodSelection period -> (toggleFinishedPeriodSelection model period, Cmd.none)
+        RemoveSelectedPeriods -> (removeSelectedPeriods model, Cmd.none)
 
 switchTab : Model -> Tab -> Model
 switchTab (Timesheet model) tab =
@@ -64,7 +68,7 @@ stopwatch periodInProgress cumulatedTicks =
 
 view : Model -> Posix -> Html Msg
 view (Timesheet model) currentTime =
-    Html.div []
+    Html.div [ class "selected-item-form" ]
         [ Html.div [ class "stopwatch" ]
             [ Stopwatch.view (stopwatch model.periodInProgress model.cumulatedTicks) currentTime
             , Html.div [ class "stopwatch__controls" ]
@@ -75,17 +79,28 @@ view (Timesheet model) currentTime =
 
             ]
         , Html.div [ class "timesheet" ]
-            [ Html.div []
-                [ Html.div [ onClick (SwitchTab PeriodsTab) ] [ Html.text "Periods" ]
-                , Html.div [ onClick (SwitchTab JiraTab) ] [ Html.text "Jira Log" ]
+            [ Html.div [ class "tabs" ]
+                [ viewTab model PeriodsTab "Periods"
+                , viewTab model JiraTab "Jira Log"
                 ]
-            , Html.div []
+            , Html.div [ class "timesheet__tab-content" ]
                 [ case model.currentTab of
                       PeriodsTab -> viewPeriodsTab (Timesheet model)
                       JiraTab -> Html.div [] [ Html.text "Jira Log tab not implemented yet" ]
                 ]
             ]
         ]
+
+viewTab : TimesheetData -> Tab -> String -> Html Msg
+viewTab ({ currentTab }) tab title =
+    Html.div
+        [ onClick (SwitchTab tab)
+        , classList
+            [ ("tab", True)
+            , ("active", currentTab == tab)
+            ]
+        ]
+        [ Html.text title ]
 
 
 startPeriod : Model -> Posix -> Maybe Model
@@ -106,7 +121,7 @@ addPeriod (Timesheet model) end =
         |> Maybe.map
             ( \start ->
                 { model
-                | finishedPeriods = model.finishedPeriods ++ [ Period start end [] ]
+                | finishedPeriods = model.finishedPeriods ++ [ (False, Period start end []) ]
                 , periodInProgress = Nothing
                 , cumulatedTicks = model.cumulatedTicks + ( duration start end )
                 }
@@ -137,27 +152,75 @@ durationHumanReadable start end =
 
 viewPeriodsTab : Model -> Html Msg
 viewPeriodsTab (Timesheet model) =
-    Html.table []
-        ( Html.tr []
-            [ Html.th [] [ Html.text "Duration" ]
-            , Html.th [] [ Html.text "Start" ]
-            , Html.th [] [ Html.text "End" ]
-            , Html.th [] [ Html.text "Integrations" ]
-            ]
-        :: (List.map viewPeriodRow model.finishedPeriods)
-        )
+    Html.div []
+        [ viewPeriodsActions model
+        , Html.table []
+            ( Html.tr []
+              [ Html.th [] [ ]
+              , Html.th [] [ Html.text "Duration" ]
+              , Html.th [] [ Html.text "Start" ]
+              , Html.th [] [ Html.text "End" ]
+              , Html.th [] [ Html.text "Integrations" ]
+              ]
+            :: (List.map viewPeriodRow model.finishedPeriods)
+            )
+        ]
 
-viewPeriodRow : Period -> Html Msg
-viewPeriodRow (Period start end integrations) =
-    Html.tr []
-        [ Html.td [] [ Html.text (durationHumanReadable start end) ]
-        , Html.td [] [ Html.text (Iso8601.fromTime start)]
-        , Html.td [] [ Html.text (Iso8601.fromTime end)]
+viewPeriodsActions : TimesheetData -> Html Msg
+viewPeriodsActions model =
+    let
+        selectedPeriodsCount = (countSelectedItems model.finishedPeriods)
+    in
+    Html.div []
+        [ Html.text ((String.fromInt selectedPeriodsCount) ++ " selected")
+        , Html.button [ onClick RemoveSelectedPeriods, disabled (selectedPeriodsCount == 0) ] [ Html.text "Remove" ]
+        , Html.button [ ] [ Html.text "Log" ]
+        ]
+
+countSelectedItems : List (Bool, a) -> Int
+countSelectedItems =
+    List.foldl
+        (\(selection, _) sum -> if selection then sum + 1 else sum)
+        0
+
+
+viewPeriodRow : (Bool, Period) -> Html Msg
+viewPeriodRow (selected, period) =
+    let
+        (Period start end integrations) = period
+    in
+    Html.tr [ classList [("selected", selected)] ]
+        [ Html.td [] [ Html.input [ type_ "checkbox", checked selected, onClick (TogglePeriodSelection period) ] [] ]
+        , Html.td [ onClick (TogglePeriodSelection period) ] [ Html.text (durationHumanReadable start end) ]
+        , Html.td [ onClick (TogglePeriodSelection period) ] [ Html.text (Iso8601.fromTime start)]
+        , Html.td [ onClick (TogglePeriodSelection period) ] [ Html.text (Iso8601.fromTime end)]
         , Html.td [] []
         ]
 
 periodToDuration : Period -> Int
 periodToDuration (Period start end _) = duration start end
+
+
+toggleFinishedPeriodSelection : Model -> Period -> Model
+toggleFinishedPeriodSelection (Timesheet model) period =
+    Timesheet
+        ({
+            model
+            | finishedPeriods = List.map
+                (\(selection, currentPeriod) ->
+                    if currentPeriod == period then
+                        (not selection, currentPeriod)
+                    else
+                        (selection, currentPeriod)
+                ) model.finishedPeriods
+        })
+
+removeSelectedPeriods : Model -> Model
+removeSelectedPeriods (Timesheet model) =
+    Timesheet
+        { model
+        | finishedPeriods = List.filter (Tuple.first >> not) model.finishedPeriods
+        }
 
 
 -- DECODERS
@@ -175,7 +238,7 @@ decoder =
                 in
                     D.map4 TimesheetData
                         ( D.field "currentTab" tabDecoder )
-                        ( D.succeed finishedPeriods )
+                        ( D.succeed (List.map (\period -> (False, period)) finishedPeriods ))
                         ( D.field "periodInProgress" (D.nullable posixDecoder) )
                         ( D.succeed cumulatedTicks )
             )
@@ -210,7 +273,7 @@ encode : Model -> Value
 encode (Timesheet { currentTab, finishedPeriods, periodInProgress }) =
     E.object
         [ ( "currentTab", encodeTab currentTab )
-        , ( "finishedPeriods", E.list encodePeriod finishedPeriods )
+        , ( "finishedPeriods", E.list encodePeriod (List.map Tuple.second finishedPeriods) )
         , ( "periodInProgress"
           , periodInProgress
                 |> Maybe.map encodePosix
