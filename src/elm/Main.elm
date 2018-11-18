@@ -106,10 +106,16 @@ update msg model =
         TimesheetMsg submsg ->
             let
                 selectedIssue = getSelectedIssue model.issues
-                (updatedTimesheet, cmd) = Timesheet.update submsg selectedIssue.timesheet
-                updatedIssue= { selectedIssue | timesheet = updatedTimesheet }
+                (updatedTimesheet, cmd) = Timesheet.update model.integrations submsg selectedIssue.timesheet
+                wrappedCmd = Cmd.map TimesheetMsg cmd
+                updatedIssue = { selectedIssue | timesheet = updatedTimesheet }
+                updatedModel = { model | issues = IssueList.updateSelectedIssue model.issues updatedIssue }
             in
-            ( { model | issues = IssueList.updateSelectedIssue model.issues updatedIssue }, Cmd.map TimesheetMsg cmd )
+                ( updatedModel
+                , case Timesheet.saveStateAdvised submsg of
+                    True -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
+                    False -> wrappedCmd
+                )
 
         IntegrationConfigManagerMsg submsg ->
             let

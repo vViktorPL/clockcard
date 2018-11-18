@@ -11,6 +11,7 @@ port module Integrations exposing
     , configsSaveAdvised
     , encodeLogRef
     , logRefDecoder
+    , getJiraConfig
     )
 
 import Html exposing (Html, div)
@@ -137,3 +138,6 @@ logRefDecoder =
                     "jira" -> D.map JiraLogRef JiraLog.logRefDecoder
                     _ -> D.fail ("Invalid integration type: " ++ integration)
             )
+
+getJiraConfig : Configs -> JiraConfig.Model
+getJiraConfig (Configs _ jiraConfig) = jiraConfig

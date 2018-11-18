@@ -1,4 +1,15 @@
-module Timesheet exposing (Msg, Model, Period, update, view, init, decoder, encode, getCurrentlyRunningPeriodStart)
+module Timesheet exposing
+    ( Msg
+    , Model
+    , Period
+    , update
+    , view
+    , init
+    , decoder
+    , encode
+    , getCurrentlyRunningPeriodStart
+    , saveStateAdvised
+    )
 
 import Time exposing (Posix)
 import Html exposing (Html)
@@ -6,9 +17,13 @@ import Html.Attributes exposing (class, classList, type_, checked, disabled)
 import Iso8601
 import Json.Encode as E exposing (Value)
 import Json.Decode as D exposing (Decoder)
-
 import Html.Events exposing (onClick)
-import Integrations exposing (LogRef)
+
+import Time.Extra exposing (posixDecoder, encodePosix)
+import Integrations exposing (LogRef, getJiraConfig)
+import Integrations.Jira.Config
+import Integrations.Jira.LogTable
+import Integrations.Jira.SubmitLogForm
 import Stopwatch
 import Task
 
@@ -20,6 +35,8 @@ type Msg
     | EndCurrentPeriod Posix
     | TogglePeriodSelection Period
     | RemoveSelectedPeriods
+    | LogSelectedPeriodsToJira
+    | JiraFormMsg Integrations.Jira.SubmitLogForm.Msg
 
 type Period = Period Posix Posix (List LogRef)
 
@@ -33,18 +50,51 @@ type alias TimesheetData =
     , finishedPeriods: List (Bool, Period)
     , periodInProgress: Maybe Posix
     , cumulatedTicks: Int
+    , integrations: IntegrationsData
     }
 
-update : Msg -> Model -> (Model, Cmd Msg)
-update msg model =
+type alias IntegrationsData =
+    { jira: JiraIntegrationData
+    }
+
+type alias JiraIntegrationData =
+    { log: Integrations.Jira.LogTable.Model
+    , form: Maybe Integrations.Jira.SubmitLogForm.Model
+    }
+
+update : Integrations.Configs -> Msg -> Model -> (Model, Cmd Msg)
+update integrationConfigs msg model =
     case msg of
         SwitchTab tab -> (switchTab model tab, Cmd.none)
+
         StartNewPeriodRequested -> ( model, Task.perform StartNewPeriod Time.now )
+
         StartNewPeriod startTime -> (Maybe.withDefault model (startPeriod model startTime), Cmd.none)
+
         EndCurrentPeriodRequested -> ( model, Task.perform EndCurrentPeriod Time.now )
+
         EndCurrentPeriod endTime -> (Maybe.withDefault model (addPeriod model endTime), Cmd.none)
+
         TogglePeriodSelection period -> (toggleFinishedPeriodSelection model period, Cmd.none)
+
         RemoveSelectedPeriods -> (removeSelectedPeriods model, Cmd.none)
+
+        LogSelectedPeriodsToJira ->
+            ( openJiraLogForm
+                (getJiraConfig integrationConfigs)
+                model
+                (getSelectedPeriods model)
+            , Cmd.none
+            )
+
+        JiraFormMsg jiraMsg -> updateJiraForm jiraMsg model
+
+
+getSelectedPeriods : Model -> List Period
+getSelectedPeriods (Timesheet model) =
+    model.finishedPeriods
+        |> List.filter Tuple.first
+        |> List.map Tuple.second
 
 switchTab : Model -> Tab -> Model
 switchTab (Timesheet model) tab =
@@ -57,7 +107,63 @@ init =
         , finishedPeriods = []
         , periodInProgress = Nothing
         , cumulatedTicks = 0
+        , integrations =
+            { jira =
+                { log = Integrations.Jira.LogTable.init
+                , form = Nothing
+                }
+
+            }
         }
+
+getModelData : Model -> TimesheetData
+getModelData (Timesheet model) = model
+
+updateJiraForm : Integrations.Jira.SubmitLogForm.Msg -> Model -> (Model, Cmd Msg)
+updateJiraForm msg model =
+    let
+        modelData = getModelData model
+        (updatedForm, formCmd) =
+            modelData.integrations.jira.form
+                |> Maybe.map (Integrations.Jira.SubmitLogForm.update msg)
+                |> Maybe.map (Tuple.mapFirst Just)
+                |> Maybe.withDefault (Nothing, Cmd.none)
+    in
+    ( mapJiraIntegration ( \jiraModel -> { jiraModel | form = updatedForm }) model
+    , Cmd.none
+    )
+
+
+mapJiraIntegration : (JiraIntegrationData -> JiraIntegrationData) -> Model -> Model
+mapJiraIntegration f (Timesheet model) =
+    let
+        integrations = model.integrations
+        jiraIntegration = integrations.jira
+    in
+        Timesheet { model | integrations = { integrations | jira = f jiraIntegration } }
+
+openJiraLogForm : Integrations.Jira.Config.Model -> Model -> List Period -> Model
+openJiraLogForm jiraConfig model periods =
+    let
+        defaultStartTime = List.head periods
+            |> Maybe.map (\(Period startTime _ _) -> startTime)
+            |> Maybe.withDefault (Time.millisToPosix 0)
+    in
+        mapJiraIntegration
+            ( \jiraModel ->
+                { jiraModel
+                | form = Just <|
+                    Integrations.Jira.SubmitLogForm.init
+                        jiraConfig
+                        defaultStartTime
+                        ( periods
+                            |> List.map periodToDuration
+                            |> List.foldl (+) 0
+                        )
+                }
+            )
+            model
+
 
 stopwatch : Maybe Posix -> Int -> Stopwatch.Model
 stopwatch periodInProgress cumulatedTicks =
@@ -65,31 +171,47 @@ stopwatch periodInProgress cumulatedTicks =
         Just startTime -> Stopwatch.running cumulatedTicks startTime
         Nothing -> Stopwatch.paused cumulatedTicks
 
+formOpened : TimesheetData -> Bool
+formOpened model =
+    case model.integrations.jira.form of
+        Just _ -> True
+        Nothing -> False
+
 
 view : Model -> Posix -> Html Msg
 view (Timesheet model) currentTime =
     Html.div [ class "selected-item-form" ]
-        [ Html.div [ class "stopwatch" ]
-            [ Stopwatch.view (stopwatch model.periodInProgress model.cumulatedTicks) currentTime
-            , Html.div [ class "stopwatch__controls" ]
-                [ case model.periodInProgress of
-                    Nothing -> Html.button [ onClick StartNewPeriodRequested ] [ Html.text "Start ▶" ]
-                    Just _ -> Html.button [ onClick EndCurrentPeriodRequested ] [ Html.text "❚❚ Pause" ]
-                ]
+        [ case (model.integrations.jira.form) of
+            Just jiraForm -> viewJiraForm jiraForm
+            Nothing -> viewStopwatch model currentTime
 
-            ]
         , Html.div [ class "timesheet" ]
             [ Html.div [ class "tabs" ]
                 [ viewTab model PeriodsTab "Periods"
                 , viewTab model JiraTab "Jira Log"
                 ]
-            , Html.div [ class "timesheet__tab-content" ]
+            , Html.fieldset [ class "timesheet__tab-content", disabled (formOpened model) ]
                 [ case model.currentTab of
                       PeriodsTab -> viewPeriodsTab (Timesheet model)
                       JiraTab -> Html.div [] [ Html.text "Jira Log tab not implemented yet" ]
                 ]
             ]
         ]
+
+viewStopwatch : TimesheetData -> Posix -> Html Msg
+viewStopwatch model currentTime =
+    Html.div [ class "stopwatch" ]
+        [ Stopwatch.view (stopwatch model.periodInProgress model.cumulatedTicks) currentTime
+        , Html.div [ class "stopwatch__controls" ]
+            [ case model.periodInProgress of
+                Nothing -> Html.button [ onClick StartNewPeriodRequested ] [ Html.text "Start ▶" ]
+                Just _ -> Html.button [ onClick EndCurrentPeriodRequested ] [ Html.text "❚❚ Pause" ]
+            ]
+
+        ]
+
+viewJiraForm jiraForm =
+    Html.div [] [ Html.map JiraFormMsg (Integrations.Jira.SubmitLogForm.view jiraForm) ]
 
 viewTab : TimesheetData -> Tab -> String -> Html Msg
 viewTab ({ currentTab }) tab title =
@@ -137,18 +259,23 @@ duration : Posix -> Posix -> Int
 duration start end =
      ((Time.posixToMillis end) - (Time.posixToMillis start)) // 1000
 
-durationHumanReadable : Posix -> Posix -> String
-durationHumanReadable start end =
-    let
-        totalSecs = duration start end
-        hours = totalSecs // 3600
-        minutes = (totalSecs - (hours * 3600)) // 60
-        secs = totalSecs - (hours * 3600) - (minutes * 60)
-    in
-        [ (hours, "h"), (minutes, "m"), (secs, "s") ]
-            |> List.filter (\(count, _) -> count > 0)
-            |> List.map (\(count, unit) -> String.fromInt count ++ unit)
-            |> String.join " "
+durationHumanReadable : Int -> String
+durationHumanReadable totalSecs =
+    if totalSecs == 0 then "0"
+    else
+        let
+            hours = totalSecs // 3600
+            minutes = (totalSecs - (hours * 3600)) // 60
+            secs =
+                if hours == 0 && minutes == 0 then
+                    totalSecs - (hours * 3600) - (minutes * 60)
+                else
+                    0
+        in
+            [ (hours, "h"), (minutes, "m"), (secs, "s") ]
+                |> List.filter (\(count, _) -> count > 0)
+                |> List.map (\(count, unit) -> String.fromInt count ++ unit)
+                |> String.join " "
 
 viewPeriodsTab : Model -> Html Msg
 viewPeriodsTab (Timesheet model) =
@@ -169,12 +296,13 @@ viewPeriodsTab (Timesheet model) =
 viewPeriodsActions : TimesheetData -> Html Msg
 viewPeriodsActions model =
     let
-        selectedPeriodsCount = (countSelectedItems model.finishedPeriods)
+        actionsDisabled = (countSelectedItems model.finishedPeriods) == 0
+        selectedDuration = (countSelectedDuration model.finishedPeriods)
     in
     Html.div []
-        [ Html.text ((String.fromInt selectedPeriodsCount) ++ " selected")
-        , Html.button [ onClick RemoveSelectedPeriods, disabled (selectedPeriodsCount == 0) ] [ Html.text "Remove" ]
-        , Html.button [ ] [ Html.text "Log" ]
+        [ Html.text ((durationHumanReadable selectedDuration) ++ " selected")
+        , Html.button [ onClick RemoveSelectedPeriods, disabled actionsDisabled ] [ Html.text "Remove" ]
+        , Html.button [ onClick LogSelectedPeriodsToJira, disabled actionsDisabled ] [ Html.text "Log" ]
         ]
 
 countSelectedItems : List (Bool, a) -> Int
@@ -182,6 +310,13 @@ countSelectedItems =
     List.foldl
         (\(selection, _) sum -> if selection then sum + 1 else sum)
         0
+
+countSelectedDuration : List (Bool, Period) -> Int
+countSelectedDuration periods =
+    periods
+        |> List.filter Tuple.first
+        |> List.map (Tuple.second >> periodToDuration)
+        |> List.foldl (+) 0
 
 
 viewPeriodRow : (Bool, Period) -> Html Msg
@@ -191,7 +326,7 @@ viewPeriodRow (selected, period) =
     in
     Html.tr [ classList [("selected", selected)] ]
         [ Html.td [] [ Html.input [ type_ "checkbox", checked selected, onClick (TogglePeriodSelection period) ] [] ]
-        , Html.td [ onClick (TogglePeriodSelection period) ] [ Html.text (durationHumanReadable start end) ]
+        , Html.td [ onClick (TogglePeriodSelection period) ] [ Html.text (durationHumanReadable (duration start end)) ]
         , Html.td [ onClick (TogglePeriodSelection period) ] [ Html.text (Iso8601.fromTime start)]
         , Html.td [ onClick (TogglePeriodSelection period) ] [ Html.text (Iso8601.fromTime end)]
         , Html.td [] []
@@ -217,10 +352,25 @@ toggleFinishedPeriodSelection (Timesheet model) period =
 
 removeSelectedPeriods : Model -> Model
 removeSelectedPeriods (Timesheet model) =
+    let
+        updatedPeriods = List.filter (Tuple.first >> not) model.finishedPeriods
+    in
     Timesheet
         { model
-        | finishedPeriods = List.filter (Tuple.first >> not) model.finishedPeriods
+        | finishedPeriods = updatedPeriods
+        , cumulatedTicks = updatedPeriods
+            |> List.map (Tuple.second >> periodToDuration)
+            |> List.foldl (+) 0
         }
+
+saveStateAdvised : Msg -> Bool
+saveStateAdvised msg =
+    case msg of
+        StartNewPeriod _ -> True
+        EndCurrentPeriod _ -> True
+        RemoveSelectedPeriods -> True
+        LogSelectedPeriodsToJira -> True
+        _ -> False
 
 
 -- DECODERS
@@ -236,11 +386,12 @@ decoder =
                             |> List.map periodToDuration
                             |> List.foldl (+) 0
                 in
-                    D.map4 TimesheetData
+                    D.map5 TimesheetData
                         ( D.field "currentTab" tabDecoder )
                         ( D.succeed (List.map (\period -> (False, period)) finishedPeriods ))
                         ( D.field "periodInProgress" (D.nullable posixDecoder) )
                         ( D.succeed cumulatedTicks )
+                        ( D.field "integrations" integrationsDecoder )
             )
         |> D.map Timesheet
 
@@ -263,14 +414,23 @@ periodDecoder =
         ( D.field "end" posixDecoder )
         ( D.field "logRefs" (D.list Integrations.logRefDecoder) )
 
-posixDecoder : Decoder Posix
-posixDecoder =
-    D.map Time.millisToPosix D.int
+integrationsDecoder : Decoder IntegrationsData
+integrationsDecoder =
+    D.map IntegrationsData
+        jiraIntegrationDecoder
+
+
+jiraIntegrationDecoder : Decoder JiraIntegrationData
+jiraIntegrationDecoder =
+    D.map2 JiraIntegrationData
+        (D.field "jira" Integrations.Jira.LogTable.decoder)
+        (D.succeed Nothing)
+
 
 -- ENCODING
 
 encode : Model -> Value
-encode (Timesheet { currentTab, finishedPeriods, periodInProgress }) =
+encode (Timesheet { currentTab, finishedPeriods, periodInProgress, integrations }) =
     E.object
         [ ( "currentTab", encodeTab currentTab )
         , ( "finishedPeriods", E.list encodePeriod (List.map Tuple.second finishedPeriods) )
@@ -279,7 +439,9 @@ encode (Timesheet { currentTab, finishedPeriods, periodInProgress }) =
                 |> Maybe.map encodePosix
                 |> Maybe.withDefault E.null
           )
+        , ( "integrations", encodeIntegrations integrations)
         ]
+
 
 encodePeriod : Period -> Value
 encodePeriod (Period start end logRefs) =
@@ -289,12 +451,15 @@ encodePeriod (Period start end logRefs) =
         , ("logRefs", E.list Integrations.encodeLogRef logRefs)
         ]
 
-encodePosix : Posix -> Value
-encodePosix posix =
-    E.int <| Time.posixToMillis posix
 
 encodeTab : Tab -> Value
 encodeTab tab =
     case tab of
         PeriodsTab -> E.string "periods"
         JiraTab -> E.string "jira"
+
+encodeIntegrations : IntegrationsData -> Value
+encodeIntegrations { jira } =
+    E.object
+        [ ("jira", Integrations.Jira.LogTable.encode jira.log)
+        ]

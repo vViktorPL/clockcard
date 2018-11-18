@@ -1,4 +1,4 @@
-port module Integrations.Jira.Config exposing
+module Integrations.Jira.Config exposing
     ( Model
     , Msg
     , decoder
