@@ -130,7 +130,7 @@ updateJiraForm msg model =
                 |> Maybe.withDefault (Nothing, Cmd.none)
     in
     ( mapJiraIntegration ( \jiraModel -> { jiraModel | form = updatedForm }) model
-    , Cmd.none
+    , Cmd.map JiraFormMsg formCmd
     )
 
 

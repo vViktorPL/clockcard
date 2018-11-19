@@ -10,6 +10,7 @@ module Integrations.Jira.Config exposing
     , ProjectData
     , getValidDestinations
     , ValidDestination
+    , projectData
     )
 
 import Html exposing (Html, div, form)

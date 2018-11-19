@@ -11,6 +11,7 @@
             "elm/html": "1.0.0",
             "elm/json": "1.0.0",
             "elm/time": "1.0.0",
+            "jinjor/elm-debounce": "3.0.0",
             "rtfeldman/elm-iso8601-date-strings": "1.1.2",
             "vViktorPL/elm-jira-connector": "1.0.2"
         },

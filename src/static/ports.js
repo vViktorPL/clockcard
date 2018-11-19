@@ -21,3 +21,21 @@ app.ports.save.subscribe(
 ipcRenderer.on('menu-jira-clicked', () => {
   app.ports.showJiraManager.send(null);
 });
+
+customElements.define('datetime-picker', class extends HTMLElement {
+  connectedCallback() {
+    this.createShadowRoot();
+  }
+
+  attachedCallback() {
+    const input = document.createElement('input');
+    input.setAttribute('type', 'datetime-local');
+    input.addEventListener('change', () => {
+      const value = input.value !== '' ? JSON.parse(JSON.stringify(new Date(input.value))) : '';
+
+      this.dispatchEvent(new CustomEvent('localizedChange', { detail: { value } }));
+    });
+
+    this.shadowRoot.appendChild(input);
+  }
+});
