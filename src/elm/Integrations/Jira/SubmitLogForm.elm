@@ -2,8 +2,8 @@ module Integrations.Jira.SubmitLogForm exposing (Model, Msg, update, view, init)
 
 import Time exposing (Posix)
 import Html exposing (Html)
-import Html.Events exposing (onClick, on, targetValue)
-import Html.Attributes exposing (value, selected, placeholder)
+import Html.Events exposing (onClick, on, targetValue, onInput)
+import Html.Attributes exposing (value, selected, placeholder, class, src)
 import Json.Decode as D exposing (Decoder)
 import Jira.Api
 import Jira.Pagination exposing (PageRequest, paginationConfig, pageRequest)
@@ -11,6 +11,7 @@ import Jira.Jql exposing (Jql, fieldEqualsExpression, literalStringToExpression)
 import Task
 import Iso8601
 import Debounce exposing (Debounce)
+import Json.Decode as D
 
 import Integrations
 import Integrations.Jira.Config exposing (getValidDestinations, ValidDestination, ProjectData, projectData)
@@ -31,7 +32,7 @@ type Model
         , availableProjects: List ProjectData
 
         -- Issues
-        , selectedIssue: Maybe String
+        , selectedIssue: Maybe Jira.Api.Issue
         , issueQuery: String
         , issueQueryResult: List Jira.Api.Issue
         , issueSearchDebouncer: Debounce IssueSearchQuery
@@ -50,7 +51,8 @@ type alias IssueSearchQuery =
 type Msg
     = SelectDestination String
     | SelectProject String
-    | SelectIssue
+    | SelectIssue Jira.Api.Issue
+    | ClearIssue
     | ShowConfigManager
     | AvailableProjectsList (Result Jira.Api.ApiCallError (List ProjectData))
     | SearchIssuesQueryChange String
@@ -103,6 +105,21 @@ update msg model =
             , Cmd.none
             )
 
+        ( IssuesQueryResult (Ok issues), SubmitLogForm form ) ->
+            ( SubmitLogForm { form | issueQueryResult = issues }
+            , Cmd.none
+            )
+
+        ( SelectIssue issue, SubmitLogForm form ) ->
+            ( SubmitLogForm { form | selectedIssue = Just issue }
+            , Cmd.none
+            )
+
+        ( ClearIssue, SubmitLogForm form ) ->
+            ( SubmitLogForm { form | selectedIssue = Nothing }
+            , Cmd.none
+            )
+
         ( SearchIssuesQueryChange query, SubmitLogForm form ) ->
             let
                 issueQuery : IssueSearchQuery
@@ -147,10 +164,15 @@ first20items = pageRequest (paginationConfig 20) 1
 
 searchIssues : IssueSearchQuery -> Cmd Msg
 searchIssues { jiraCred, project, query } =
-    case (jiraCred, project) of
-        (Just cred, Just projectId) ->
+    case jiraCred of
+        Just cred ->
             let
-                jql = (fieldEqualsExpression "project" projectId)  ++ " AND text ~ " ++ (literalStringToExpression query)
+                jql =
+                    ( case project of
+                        Just projectId -> ((fieldEqualsExpression "project" projectId) ++ " AND ")
+                        Nothing -> ""
+                    )
+                    ++ "text ~ " ++ (literalStringToExpression (query ++ "*"))
             in
             Jira.Api.getIssues cred first20items jql []
                 |> Task.map Jira.Pagination.getItems
@@ -246,7 +268,7 @@ viewProjectsSelect availableProjects selectedProject =
         (
             ( Html.option
                 [ value "", selected (selectedProject == Nothing) ]
-                [ Html.text "-"]
+                [ Html.text "Any"]
             ) ::
             ( List.map
                 (\project ->
@@ -268,12 +290,41 @@ viewIssueSelect : Model -> Html Msg
 viewIssueSelect model =
     case model of
         SubmitLogForm form ->
-            Html.div []
-                [ Html.input [ onChange SearchIssuesQueryChange, value form.issueQuery, placeholder "Search issue" ] []
-                ]
+            case form.selectedIssue of
+                Just issue ->
+                    Html.div [ onClick ClearIssue ] [ viewIssue issue ]
+
+                Nothing ->
+                    Html.div [ class "prompt-input" ]
+                        [ Html.input [ onInput SearchIssuesQueryChange, value form.issueQuery, placeholder "Search issue" ] []
+                        , Html.div []
+                            [ Html.div [ class "prompt" ]
+                                (List.map viewPromptItem form.issueQueryResult)
+                            ]
+                        ]
 
 
         EmptyConfig -> Html.text ""
 
+
+viewPromptItem : Jira.Api.Issue -> Html Msg
+viewPromptItem issue =
+    Html.div [ onClick (SelectIssue issue), class "prompt__item" ] [ viewIssue issue ]
+
+viewIssue : Jira.Api.Issue -> Html Msg
+viewIssue issue =
+    Jira.Api.getIssueFields issue
+        |> D.decodeValue
+            ( D.map3
+                ( \icon key summary -> Html.div [ class "jira-issue"]
+                    [ Html.img [ src icon ] []
+                    , Html.text ("[" ++ key ++ "] " ++ summary)
+                    ]
+                )
+                (D.at ["issuetype", "iconUrl"] D.string)
+                (D.succeed (Jira.Api.getIssueKey issue))
+                (D.field "summary" D.string)
+            )
+        |> Result.withDefault (Html.text "")
 
 --viewStartDatePicker :

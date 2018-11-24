@@ -262,3 +262,46 @@ fieldset[disabled] {
     pointer-events: none;
     opacity: 0.7;
 }
+
+.prompt-input {
+    display: inline-block;
+}
+
+.prompt-input > div {
+    display: block;
+    position: relative;
+}
+
+/*.prompt-input input:focus + div {*/
+    /*display: block;*/
+/*}*/
+
+.prompt-input .prompt {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 200px;
+    text-align: left;
+    background: Menu;
+    border: solid 1px;
+}
+
+.prompt__item {
+    width: 100%;
+    cursor: pointer;
+}
+
+.jira-issue {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 5px;
+}
+
+.jira-issue img {
+    margin-right: 4px;
+}
+
+.prompt__item:hover {
+    background-color: Highlight;
+    color: HighlightText;
+}
