@@ -28,6 +28,7 @@
     "elm-test": "^0.19.0-beta12"
   },
   "dependencies": {
-    "electron-default-menu": "^1.0.1"
+    "electron-default-menu": "^1.0.1",
+    "time-elements": "^1.2.0"
   }
 }

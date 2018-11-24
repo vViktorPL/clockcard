@@ -13,7 +13,7 @@ module Timesheet exposing
 
 import Time exposing (Posix)
 import Html exposing (Html)
-import Html.Attributes exposing (class, classList, type_, checked, disabled)
+import Html.Attributes exposing (class, classList, type_, checked, disabled, attribute, datetime)
 import Iso8601
 import Json.Encode as E exposing (Value)
 import Json.Decode as D exposing (Decoder)
@@ -327,10 +327,22 @@ viewPeriodRow (selected, period) =
     Html.tr [ classList [("selected", selected)] ]
         [ Html.td [] [ Html.input [ type_ "checkbox", checked selected, onClick (TogglePeriodSelection period) ] [] ]
         , Html.td [ onClick (TogglePeriodSelection period) ] [ Html.text (durationHumanReadable (duration start end)) ]
-        , Html.td [ onClick (TogglePeriodSelection period) ] [ Html.text (Iso8601.fromTime start)]
-        , Html.td [ onClick (TogglePeriodSelection period) ] [ Html.text (Iso8601.fromTime end)]
+        , Html.td [ onClick (TogglePeriodSelection period) ] [ viewPosix start ]
+        , Html.td [ onClick (TogglePeriodSelection period) ] [ viewPosix end ]
         , Html.td [] []
         ]
+
+viewPosix : Posix -> Html msg
+viewPosix time =
+    Html.node "local-time"
+        [ datetime (Iso8601.fromTime time)
+        , attribute "day" "numeric"
+        , attribute "month" "short"
+        , attribute "year" "numeric"
+        , attribute "hour" "numeric"
+        , attribute "minute" "numeric"
+        ]
+        []
 
 periodToDuration : Period -> Int
 periodToDuration (Period start end _) = duration start end

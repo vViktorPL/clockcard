@@ -53,6 +53,7 @@ type Msg
     | SelectProject String
     | SelectIssue Jira.Api.Issue
     | ClearIssue
+    | ChangeStartDate String
     | ShowConfigManager
     | AvailableProjectsList (Result Jira.Api.ApiCallError (List ProjectData))
     | SearchIssuesQueryChange String
@@ -119,6 +120,12 @@ update msg model =
             ( SubmitLogForm { form | selectedIssue = Nothing }
             , Cmd.none
             )
+
+        ( ChangeStartDate newDate, SubmitLogForm form ) ->
+            ( SubmitLogForm { form | startDate = newDate }
+            , Cmd.none
+            )
+
 
         ( SearchIssuesQueryChange query, SubmitLogForm form ) ->
             let
@@ -223,6 +230,8 @@ view model =
                     (viewProjectsSelect form.availableProjects form.selectedProject)
                 , viewFormInput "Select issue"
                     (viewIssueSelect model)
+                , viewFormInput "Start date"
+                    (viewStartDatePicker model)
                 ]
 
 
@@ -327,4 +336,14 @@ viewIssue issue =
             )
         |> Result.withDefault (Html.text "")
 
---viewStartDatePicker :
+onLocalizedDateChange : (String -> msg) -> Html.Attribute msg
+onLocalizedDateChange msg =
+    on "localizedChange" (D.at ["detail", "value"] D.string |> D.map msg)
+
+viewStartDatePicker : Model -> Html Msg
+viewStartDatePicker model =
+    case model of
+        SubmitLogForm form ->
+            Html.node "datetime-picker" [ value form.startDate, onLocalizedDateChange ChangeStartDate ] []
+
+        _ -> Html.text ""
