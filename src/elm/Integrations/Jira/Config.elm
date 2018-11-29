@@ -10,7 +10,6 @@ module Integrations.Jira.Config exposing
     , ProjectData
     , getValidDestinations
     , ValidDestination
-    , projectData
     )
 
 import Html exposing (Html, div, form)
@@ -32,10 +31,16 @@ type Validity
     | Invalid
 
 
-type alias ValidDestination = ( String, Jira.Api.Cred )
+type alias ValidDestination =
+    { id: String
+    , name: String
+    , cred: Jira.Api.Cred
+    , projects: List ProjectData
+    }
 
 type alias Destination =
-    { name : String
+    { id : Int
+    , name : String
     , host : String
     , authUsername : String
     , authPassword : String
@@ -69,6 +74,7 @@ type Msg
 
 type alias Model =
     { destinations : Maybe (SelectableList Destination)
+    , nextDestinationId : Int
     }
 
 
@@ -156,9 +162,10 @@ addNewDestination model =
     }
 
 
-newDestination : Destination
-newDestination =
-    { name = ""
+newDestination : Int -> Destination
+newDestination id =
+    { id = id
+    , name = ""
     , host = ""
     , authUsername = ""
     , authPassword = ""
@@ -426,7 +433,14 @@ getValidDestinations model =
             ( List.filterMap
                 ( \destination ->
                     case (destination.valid, destinationToCred destination) of
-                        (Valid, Ok cred) -> Just (destination.name, cred)
+                        (Valid, Ok cred) ->
+                            Just
+                                { id = String.fromInt destination.id
+                                , name = destination.name
+                                , cred = cred
+                                , projects = destination.projects |> Maybe.withDefault []
+                                }
+
                         _ -> Nothing
                 )
             )

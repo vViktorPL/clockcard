@@ -286,6 +286,10 @@ fieldset[disabled] {
     border: solid 1px;
 }
 
+.prompt-input .prompt:empty {
+    display: none;
+}
+
 .prompt__item {
     width: 100%;
     cursor: pointer;

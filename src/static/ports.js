@@ -3,7 +3,7 @@
 require('time-elements');
 require('./datetime-picker');
 
-const { ipcRenderer } = require('electron');
+const { ipcRenderer, remote } = require('electron');
 
 const { Elm: { Main: ElmApp } } = require('./elm.js');
 const initialState = localStorage.getItem('state');
@@ -24,3 +24,9 @@ app.ports.save.subscribe(
 ipcRenderer.on('menu-jira-clicked', () => {
   app.ports.showJiraManager.send(null);
 });
+
+app.ports.showElectronErrorBox.subscribe(
+  ({ title = 'Error', content }) => {
+    remote.dialog.showErrorBox(title, content);
+  }
+);
