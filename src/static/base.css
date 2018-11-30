@@ -92,6 +92,9 @@ body {
     font-size: 80px;
     font-family: sans-serif;
     cursor: default;
+    height: 220px;
+    transition: height 1s, opacity 1s;
+    overflow: hidden;
 }
 
 .stopwatch__control {
@@ -149,6 +152,11 @@ body {
     transition: opacity ease 0.5s, visibility ease 0.5s;
 }
 
+.manager-window__content {
+    display: flex;
+    height: calc(100% - 52px);
+}
+
 .manager-window:not(.hidden) {
     opacity: 1;
 }
@@ -186,7 +194,7 @@ body {
 
 .manager-window__destinations-list {
     background-color: Menu;
-    width: 200px;
+    flex: 0 0 200px;
     height: 100%;
     float: left;
     border-right: WindowFrame 1px solid;
@@ -210,6 +218,8 @@ body {
 
 .manager-window__current-destination-form {
     padding: 10px;
+    flex: 1;
+    height: 100%;
 }
 
 .hidden {
@@ -308,4 +318,32 @@ fieldset[disabled] {
 .prompt__item:hover {
     background-color: Highlight;
     color: HighlightText;
+}
+
+.collapsed {
+    height: 0 !important;
+    opacity: 0 !important;
+}
+
+.jira-log-form {
+    height: 260px;
+    transition: opacity 1s, height 1s;
+    overflow: hidden;
+}
+
+.big-icon {
+    font-size: 100px;
+    text-align: center;
+    display: block;
+}
+
+.action-link, a {
+    color: cadetblue;
+    text-decoration: underline;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.big-placeholder-message {
+  padding: 0 50px;
 }

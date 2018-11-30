@@ -48,17 +48,17 @@ view model =
     div
         [ id "container" ]
         [ Html.map IssueListMsg (IssueList.view model.issues)
-        , Html.map TimesheetMsg (Timesheet.view (getCurrentTimesheet model) model.currentTime)
+        , Html.map TimesheetMsg (Timesheet.view model.integrations (getCurrentTimesheet model) model.currentTime)
         , Html.map IntegrationConfigManagerMsg (Integrations.viewConfigManagers model.integrations)
         ]
 
 
-normalizeState : Model -> Value
-normalizeState model =
+encodeState : Model -> Value
+encodeState model =
     Json.Encode.object
         [ ( "version", int 1 )
         , ( "issues", IssueList.normalize model.issues )
-        , ( "integrations", Integrations.normalizeConfigs model.integrations )
+        , ( "integrations", Integrations.encodeConfigs model.integrations )
         ]
 
 
@@ -71,7 +71,7 @@ decoder =
 
 
 saveNormalized model =
-    model |> normalizeState |> save
+    model |> encodeState |> save
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )

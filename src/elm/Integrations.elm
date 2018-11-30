@@ -1,10 +1,11 @@
 port module Integrations exposing
     ( Configs
     , ConfigsMsg
-    , LogRef
+    , LogRef(..)
     , viewConfigManagers
+    , viewLogRef
     , updateConfigManagers
-    , normalizeConfigs
+    , encodeConfigs
     , decodeConfigs
     , initConfigs
     , subscriptions
@@ -21,7 +22,7 @@ import Json.Encode as E exposing (Value)
 import Json.Decode as D exposing (Decoder)
 
 import Integrations.Jira.Config as JiraConfig
-import Integrations.Jira.Log as JiraLog
+import Integrations.Jira.IssueLogManager as JiraIssueLogManager
 
 port showJiraManager : (() -> msg) -> Sub msg
 
@@ -32,9 +33,8 @@ type ConfigsMsg
     | JiraConfigMsg JiraConfig.Msg
 
 type LogRef
-    = JiraLogRef JiraLog.LogRef
---
---type LogTable = JiraTab
+    = JiraLogRef JiraIssueLogManager.LogRef
+
 
 viewConfigManagers : Configs -> Html ConfigsMsg
 viewConfigManagers (Configs currentManager jiraConfig) =
@@ -80,10 +80,10 @@ updateConfigManagers msg (Configs activeManager jiraConfig) =
 
 
 
-normalizeConfigs : Configs ->  Value
-normalizeConfigs (Configs _ jiraConfig) =
+encodeConfigs : Configs ->  Value
+encodeConfigs (Configs _ jiraConfig) =
     E.object
-        [ ("jira", JiraConfig.normalize jiraConfig)
+        [ ("jira", JiraConfig.encode jiraConfig)
         ]
 
 decodeConfigs : Decoder Configs
@@ -107,16 +107,11 @@ configsSaveAdvised msg =
         ShowConfigManager None -> True
         _ -> False
 
---viewLogRef : LogRef -> Html Msg
---viewLogRef logRef =
---    case logRef of
---        JiraLogRef jiraLogRef -> Integrations.Jira.Log. jiraLogRef
---
---
---viewLogTable : LogTable -> Html Msg
---viewLogTable logTable =
---    case logTable of
---        JiraTab ->
+viewLogRef : LogRef -> Html msg
+viewLogRef logRef =
+    case logRef of
+        JiraLogRef jiraLogRef -> JiraIssueLogManager.viewLogRef jiraLogRef
+
 
 
 encodeLogRef : LogRef -> Value
@@ -125,7 +120,7 @@ encodeLogRef logRef =
         JiraLogRef jiraLogRef ->
             E.object
                 [ ("type", E.string "jira")
-                , ("data", JiraLog.encodeLogRef jiraLogRef)
+                , ("data", JiraIssueLogManager.encodeLogRef jiraLogRef)
                 ]
 
 
@@ -134,9 +129,11 @@ logRefDecoder =
     D.field "type" D.string
         |> D.andThen
             ( \integration ->
-                case integration of
-                    "jira" -> D.map JiraLogRef JiraLog.logRefDecoder
-                    _ -> D.fail ("Invalid integration type: " ++ integration)
+                D.field "data"
+                    ( case integration of
+                        "jira" -> D.map JiraLogRef JiraIssueLogManager.logRefDecoder
+                        _ -> D.fail ("Invalid integration type: " ++ integration)
+                    )
             )
 
 getJiraConfig : Configs -> JiraConfig.Model

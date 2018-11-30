@@ -30,3 +30,24 @@ app.ports.showElectronErrorBox.subscribe(
     remote.dialog.showErrorBox(title, content);
   }
 );
+
+// Action links router
+addChildEventListener(document, 'click', 'a[href^="clockcard:"]', function (event) {
+  event.preventDefault();
+  const action = this.href.split(':')[1];
+  switch (action) {
+    case 'jira-config-manager':
+      app.ports.showJiraManager.send(null);
+      break;
+  }
+
+});
+
+function addChildEventListener(base, eventName, selector, handler) {
+  base.addEventListener(eventName, function(event) {
+    const closest = event.target.closest(selector);
+    if (closest && base.contains(closest)) {
+      handler.call(closest, event);
+    }
+  });
+}

@@ -22,10 +22,10 @@ import Html.Events exposing (onClick)
 import Time.Extra exposing (posixDecoder, encodePosix)
 import Integrations exposing (LogRef, getJiraConfig)
 import Integrations.Jira.Config
-import Integrations.Jira.LogTable
-import Integrations.Jira.SubmitLogForm
+import Integrations.Jira.IssueLogManager as JiraIssueLogManager
 import Stopwatch
 import Task
+import Triple
 
 type Msg
     = SwitchTab Tab
@@ -36,9 +36,9 @@ type Msg
     | TogglePeriodSelection Period
     | RemoveSelectedPeriods
     | LogSelectedPeriodsToJira
-    | JiraFormMsg Integrations.Jira.SubmitLogForm.Msg
+    | JiraIssueLogManagerMsg JiraIssueLogManager.Msg
 
-type Period = Period Posix Posix (List LogRef)
+type Period = Period Posix Posix (List Integrations.LogRef)
 
 type Tab = PeriodsTab | JiraTab
 
@@ -54,13 +54,9 @@ type alias TimesheetData =
     }
 
 type alias IntegrationsData =
-    { jira: JiraIntegrationData
+    { jira: JiraIssueLogManager.Model
     }
 
-type alias JiraIntegrationData =
-    { log: Integrations.Jira.LogTable.Model
-    , form: Maybe Integrations.Jira.SubmitLogForm.Model
-    }
 
 update : Integrations.Configs -> Msg -> Model -> (Model, Cmd Msg)
 update integrationConfigs msg model =
@@ -80,15 +76,73 @@ update integrationConfigs msg model =
         RemoveSelectedPeriods -> (removeSelectedPeriods model, Cmd.none)
 
         LogSelectedPeriodsToJira ->
-            ( openJiraLogForm
-                (getJiraConfig integrationConfigs)
-                model
-                (getSelectedPeriods model)
+            let
+                modelData = getModelData model
+                integrations = modelData.integrations
+
+                periods = (getSelectedPeriods model)
+                defaultStartTime =
+                    List.head periods
+                        |> Maybe.map (\(Period startTime _ _) -> startTime)
+                        |> Maybe.withDefault (Time.millisToPosix 0)
+                defaultDuration =
+                    periods
+                        |> List.map periodToDuration
+                        |> List.foldl (+) 0
+                        |> durationHumanReadable
+
+            in
+            ( Timesheet
+                { modelData
+                | integrations =
+                    { integrations
+                    | jira =
+                        JiraIssueLogManager.openForm
+                            integrations.jira
+                            ( JiraIssueLogManager.FormInitData
+                                defaultStartTime
+                                defaultDuration
+                            )
+                    }
+                }
             , Cmd.none
             )
 
-        JiraFormMsg jiraMsg -> updateJiraForm jiraMsg model
 
+        JiraIssueLogManagerMsg jiraMsg ->
+            let
+                modelData = getModelData model
+                integrations = modelData.integrations
+
+                (updatedJiraLogManager, jiraLogManagerCmd, outputMsg) =
+                    JiraIssueLogManager.update
+                        (getJiraConfig integrationConfigs)
+                        jiraMsg
+                        integrations.jira
+
+                updatedPeriods =
+                    case outputMsg of
+                        JiraIssueLogManager.WorkLogAdded jiraLogRef ->
+                            (modelData.finishedPeriods
+                                |> List.map
+                                    ( \(selected, Period start end logRefs) ->
+                                        if selected then
+                                            (False, Period start end (logRefs ++ [Integrations.JiraLogRef jiraLogRef]))
+                                        else
+                                            (False, Period start end logRefs)
+                                    )
+                            )
+                        _ -> modelData.finishedPeriods
+
+
+            in
+                ( Timesheet
+                    { modelData
+                    | integrations = { integrations | jira = updatedJiraLogManager }
+                    , finishedPeriods = updatedPeriods
+                    }
+                , Cmd.map JiraIssueLogManagerMsg jiraLogManagerCmd
+                )
 
 getSelectedPeriods : Model -> List Period
 getSelectedPeriods (Timesheet model) =
@@ -108,61 +162,13 @@ init =
         , periodInProgress = Nothing
         , cumulatedTicks = 0
         , integrations =
-            { jira =
-                { log = Integrations.Jira.LogTable.init
-                , form = Nothing
-                }
-
+            { jira = JiraIssueLogManager.init
             }
         }
 
 getModelData : Model -> TimesheetData
 getModelData (Timesheet model) = model
 
-updateJiraForm : Integrations.Jira.SubmitLogForm.Msg -> Model -> (Model, Cmd Msg)
-updateJiraForm msg model =
-    let
-        modelData = getModelData model
-        (updatedForm, formCmd) =
-            modelData.integrations.jira.form
-                |> Maybe.map (Integrations.Jira.SubmitLogForm.update msg)
-                |> Maybe.map (Tuple.mapFirst Just)
-                |> Maybe.withDefault (Nothing, Cmd.none)
-    in
-    ( mapJiraIntegration ( \jiraModel -> { jiraModel | form = updatedForm }) model
-    , Cmd.map JiraFormMsg formCmd
-    )
-
-
-mapJiraIntegration : (JiraIntegrationData -> JiraIntegrationData) -> Model -> Model
-mapJiraIntegration f (Timesheet model) =
-    let
-        integrations = model.integrations
-        jiraIntegration = integrations.jira
-    in
-        Timesheet { model | integrations = { integrations | jira = f jiraIntegration } }
-
-openJiraLogForm : Integrations.Jira.Config.Model -> Model -> List Period -> Model
-openJiraLogForm jiraConfig model periods =
-    let
-        defaultStartTime = List.head periods
-            |> Maybe.map (\(Period startTime _ _) -> startTime)
-            |> Maybe.withDefault (Time.millisToPosix 0)
-    in
-        mapJiraIntegration
-            ( \jiraModel ->
-                { jiraModel
-                | form = Just <|
-                    Integrations.Jira.SubmitLogForm.init
-                        jiraConfig
-                        defaultStartTime
-                        ( periods
-                            |> List.map periodToDuration
-                            |> List.foldl (+) 0
-                        )
-                }
-            )
-            model
 
 
 stopwatch : Maybe Posix -> Int -> Stopwatch.Model
@@ -171,36 +177,35 @@ stopwatch periodInProgress cumulatedTicks =
         Just startTime -> Stopwatch.running cumulatedTicks startTime
         Nothing -> Stopwatch.paused cumulatedTicks
 
-formOpened : TimesheetData -> Bool
-formOpened model =
-    case model.integrations.jira.form of
-        Just _ -> True
-        Nothing -> False
 
-
-view : Model -> Posix -> Html Msg
-view (Timesheet model) currentTime =
+view : Integrations.Configs -> Model -> Posix -> Html Msg
+view integrationsConfigs (Timesheet model) currentTime =
+    let
+        formOpened = JiraIssueLogManager.isFormOpened model.integrations.jira
+    in
     Html.div [ class "selected-item-form" ]
-        [ case (model.integrations.jira.form) of
-            Just jiraForm -> viewJiraForm jiraForm
-            Nothing -> viewStopwatch model currentTime
-
+        [ viewStopwatch model currentTime formOpened
         , Html.div [ class "timesheet" ]
             [ Html.div [ class "tabs" ]
                 [ viewTab model PeriodsTab "Periods"
                 , viewTab model JiraTab "Jira Log"
                 ]
-            , Html.fieldset [ class "timesheet__tab-content", disabled (formOpened model) ]
+            , Html.fieldset [ class "timesheet__tab-content", disabled formOpened ]
                 [ case model.currentTab of
                       PeriodsTab -> viewPeriodsTab (Timesheet model)
                       JiraTab -> Html.div [] [ Html.text "Jira Log tab not implemented yet" ]
                 ]
             ]
+        ,  Html.map JiraIssueLogManagerMsg
+              ( JiraIssueLogManager.viewForm
+                  (getJiraConfig integrationsConfigs)
+                  model.integrations.jira
+              )
         ]
 
-viewStopwatch : TimesheetData -> Posix -> Html Msg
-viewStopwatch model currentTime =
-    Html.div [ class "stopwatch" ]
+viewStopwatch : TimesheetData -> Posix -> Bool -> Html Msg
+viewStopwatch model currentTime collapsed =
+    Html.div [ classList [("stopwatch", True), ("collapsed", collapsed)] ]
         [ Stopwatch.view (stopwatch model.periodInProgress model.cumulatedTicks) currentTime
         , Html.div [ class "stopwatch__controls" ]
             [ case model.periodInProgress of
@@ -210,8 +215,6 @@ viewStopwatch model currentTime =
 
         ]
 
-viewJiraForm jiraForm =
-    Html.div [] [ Html.map JiraFormMsg (Integrations.Jira.SubmitLogForm.view jiraForm) ]
 
 viewTab : TimesheetData -> Tab -> String -> Html Msg
 viewTab ({ currentTab }) tab title =
@@ -329,7 +332,7 @@ viewPeriodRow (selected, period) =
         , Html.td [ onClick (TogglePeriodSelection period) ] [ Html.text (durationHumanReadable (duration start end)) ]
         , Html.td [ onClick (TogglePeriodSelection period) ] [ viewPosix start ]
         , Html.td [ onClick (TogglePeriodSelection period) ] [ viewPosix end ]
-        , Html.td [] []
+        , Html.td [] (List.map Integrations.viewLogRef integrations)
         ]
 
 viewPosix : Posix -> Html msg
@@ -429,14 +432,7 @@ periodDecoder =
 integrationsDecoder : Decoder IntegrationsData
 integrationsDecoder =
     D.map IntegrationsData
-        jiraIntegrationDecoder
-
-
-jiraIntegrationDecoder : Decoder JiraIntegrationData
-jiraIntegrationDecoder =
-    D.map2 JiraIntegrationData
-        (D.field "jira" Integrations.Jira.LogTable.decoder)
-        (D.succeed Nothing)
+        (D.field "jira" JiraIssueLogManager.decoder)
 
 
 -- ENCODING
@@ -473,5 +469,5 @@ encodeTab tab =
 encodeIntegrations : IntegrationsData -> Value
 encodeIntegrations { jira } =
     E.object
-        [ ("jira", Integrations.Jira.LogTable.encode jira.log)
+        [ ("jira", JiraIssueLogManager.encode jira)
         ]

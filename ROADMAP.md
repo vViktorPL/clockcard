@@ -32,15 +32,10 @@ and every list entry will have action icon/button which enables user to log time
 in specific system, icon of the specified system will indicate that period has been already logged and clicking on it will open webbrowser
 to place where time was logged (JIRA issue or Google Spreadsheet cell).
 
-* remove reset button from stopwatch
-* every paused period will appear on commits list
 * "push log" 
     * icon next to period which enables to log time
-    * bulk "push log" (checkboxes on list and bulk action button)
     * round up precision options before pushing (options: minutes, 15m, 30m, 1h, custom)
-    * JIRA integration
     * Google Spreadsheets integration
-* JIRA projects management
 * Spreadsheets management
 
 ## Improve Issue Model

@@ -3,7 +3,7 @@ module Integrations.Jira.Config exposing
     , Msg
     , decoder
     , init
-    , normalize
+    , encode
     , stateSaveAdvised
     , update
     , view
@@ -16,8 +16,8 @@ import Html exposing (Html, div, form)
 import Html.Attributes exposing (class, classList, disabled, style, type_, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
 import Jira.Api exposing (Project, getAllProjects, getProjectData)
-import Json.Decode exposing (Decoder, bool, field, keyValuePairs, list, map3, nullable, string)
-import Json.Encode as E
+import Json.Decode as D exposing (Decoder)
+import Json.Encode as E exposing (Value)
 import SelectableList exposing (SelectableList)
 import Task
 import Time exposing (Posix)
@@ -155,10 +155,11 @@ addNewDestination model =
         | destinations =
             case model.destinations of
                 Just selectableList ->
-                    Just (SelectableList.prepend selectableList newDestination)
+                    Just (SelectableList.prepend selectableList (newDestination model.nextDestinationId) )
 
                 Nothing ->
-                    SelectableList.fromList [ newDestination ]
+                    SelectableList.fromList [ (newDestination model.nextDestinationId) ]
+        , nextDestinationId = model.nextDestinationId + 1
     }
 
 
@@ -203,7 +204,7 @@ view : Model -> Html Msg
 view model =
     (case model.destinations of
         Just selectableList ->
-            div []
+            div [ class "manager-window__content" ]
                 [ div [ class "manager-window__destinations-list" ]
                     (let
                         isSelected =
@@ -218,10 +219,14 @@ view model =
                 ]
 
         Nothing ->
-            div []
-                [ Html.text "No JIRA destinations added. "
-                , Html.a [ onClick NewDestination ] [ Html.text "You can add one" ]
-                , Html.text "."
+            div [ class "big-placeholder-message" ]
+                [ Html.div [ class "big-icon" ] [ Html.text "🕸️" ]
+                , Html.strong [] [ Html.text "No JIRA destinations added yet. "]
+                , Html.p []
+                    [ Html.text "Please "
+                    , Html.a [ onClick NewDestination ] [ Html.text "add first one" ]
+                     , Html.text "."
+                    ]
                 ]
     )
 
@@ -230,12 +235,17 @@ viewDestination : Destination -> Bool -> Html Msg
 viewDestination destination isSelected =
     div [ classList [ ( "selected", isSelected ) ] ]
         [ Html.text
-            (destination.name
-                ++ (case destination.valid of
-                        Valid -> " ✅"
-                        Checking -> " ⌛"
-                        Invalid -> " ❌"
-                   )
+            (
+                ( case destination.name of
+                    "" -> "New untitled destination"
+                    name -> name
+                )
+                ++
+                ( case destination.valid of
+                    Valid -> " ✅"
+                    Checking -> " ⌛"
+                    Invalid -> " ❌"
+                )
             )
         , Html.span []
             [ Html.text
@@ -317,6 +327,7 @@ viewDestinationForm destination =
 init : Model
 init =
     { destinations = Nothing
+    , nextDestinationId = 1
     }
 
 
@@ -330,26 +341,35 @@ stateSaveAdvised msg =
             False
 
 
-normalize : Model -> E.Value
-normalize model =
-    case model.destinations of
-        Just selectableList ->
-            SelectableList.normalize normalizeDestination selectableList
-
-        Nothing ->
-            E.null
-
-
 decoder : Decoder Model
 decoder =
-    Json.Decode.map Model
-        (nullable (SelectableList.decoder destinationDecoder))
+    D.map2 Model
+        (D.field "destinations" <| D.nullable (SelectableList.decoder destinationDecoder))
+        (D.field "nextDestinationId" D.int)
 
 
-normalizeDestination : Destination -> E.Value
-normalizeDestination destination =
+encode : Model -> Value
+encode model =
     E.object
-        [ ( "name", E.string destination.name )
+        [
+            ("destinations"
+            , case model.destinations of
+                  Just selectableList ->
+                      SelectableList.normalize encodeDestination selectableList
+
+                  Nothing ->
+                      E.null
+            )
+        , ("nextDestinationId", E.int model.nextDestinationId)
+        ]
+
+
+
+encodeDestination : Destination -> E.Value
+encodeDestination destination =
+    E.object
+        [ ( "id", E.int destination.id )
+        , ( "name", E.string destination.name )
         , ( "host", E.string destination.host )
         , ( "authUsername", E.string destination.authUsername )
         , ( "authPassword", E.string destination.authPassword )
@@ -391,28 +411,29 @@ normalizeProject project =
 
 destinationDecoder : Decoder Destination
 destinationDecoder =
-    Json.Decode.map6 Destination
-        (field "name" string)
-        (field "host" string)
-        (field "authUsername" string)
-        (field "authPassword" string)
-        (field "projects" (nullable (list projectDecoder)))
-        (field "valid" validDecoder)
+    D.map7 Destination
+        (D.field "id" D.int)
+        (D.field "name" D.string)
+        (D.field "host" D.string)
+        (D.field "authUsername" D.string)
+        (D.field "authPassword" D.string)
+        (D.field "projects" (D.nullable (D.list projectDecoder)))
+        (D.field "valid" validDecoder)
 
 
 projectDecoder : Decoder ProjectData
 projectDecoder =
-    Json.Decode.map4 ProjectData
-        (field "id" string)
-        (field "name" string)
-        (field "key" string)
-        (field "avatarUrls" (keyValuePairs string))
+    D.map4 ProjectData
+        (D.field "id" D.string)
+        (D.field "name" D.string)
+        (D.field "key" D.string)
+        (D.field "avatarUrls" (D.keyValuePairs D.string))
 
 
 validDecoder : Decoder Validity
 validDecoder =
-    bool
-        |> Json.Decode.map
+    D.bool
+        |> D.map
             (\valid ->
                 if valid then
                     Valid
