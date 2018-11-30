@@ -2,23 +2,30 @@ port module Main exposing (main)
 
 import Browser
 import Html exposing (Html, div)
-import Html.Attributes exposing (id)
+import Html.Attributes exposing (id, class, style)
 import IssueList exposing (..)
-import Json.Decode exposing (Decoder, decodeValue, field)
+import Timesheet
+import Json.Decode exposing (Decoder, decodeValue, field, at)
 import Json.Encode exposing (Value, int)
-import Stopwatch exposing (Msg)
+import Time exposing (Posix)
+import Integrations
+import Task
 
 
 port save : Value -> Cmd msg
 
 
 type Msg
-    = StopwatchMsg Stopwatch.Msg
+    = TimesheetMsg Timesheet.Msg
     | IssueListMsg IssueList.Msg
+    | IntegrationConfigManagerMsg Integrations.ConfigsMsg
+    | Tick Posix
 
 
 type alias Model =
     { issues : IssueList.Model
+    , integrations: Integrations.Configs
+    , currentTime : Posix
     }
 
 
@@ -26,49 +33,65 @@ type alias IssueId =
     Int
 
 
-type alias Issue =
-    { id : IssueId
-    , name : String
-    , stopwatch : Stopwatch.Model
-    }
-
-
 type alias Flags =
     Value
 
 
-getCurrentStopwatch : Model -> Stopwatch.Model
-getCurrentStopwatch model =
+getCurrentTimesheet : Model -> Maybe Timesheet.Model
+getCurrentTimesheet model =
     model.issues
         |> IssueList.getSelectedIssue
-        |> .stopwatch
-
+        |> Maybe.map .timesheet
 
 view : Model -> Html Msg
 view model =
     div
         [ id "container" ]
         [ Html.map IssueListMsg (IssueList.view model.issues)
-        , Html.map StopwatchMsg (Stopwatch.view (getCurrentStopwatch model))
+        , viewIssuePanel model
+        , Html.map IntegrationConfigManagerMsg (Integrations.viewConfigManagers model.integrations)
         ]
 
 
-normalizeState : Model -> Value
-normalizeState model =
+viewIssuePanel : Model -> Html Msg
+viewIssuePanel model =
+    case getCurrentTimesheet model of
+        Just currentTimesheet ->
+            Html.map TimesheetMsg (Timesheet.view model.integrations currentTimesheet model.currentTime)
+
+        Nothing ->
+            Html.div [ class "big-placeholder-message"]
+                [ Html.div [ class "big-icon" ] [ Html.text "👋"]
+                , Html.strong [] [ Html.text "Hello there!" ]
+                , Html.p []
+                    [ Html.text "To create your first time-tracked issue"
+                    , Html.br [] []
+                    , Html.text "please click \""
+                    , Html.strong [] [ Html.text "+ New issue" ]
+                    , Html.text "\" on the left pane."
+                    ]
+                ]
+
+
+encodeState : Model -> Value
+encodeState model =
     Json.Encode.object
         [ ( "version", int 1 )
         , ( "issues", IssueList.normalize model.issues )
+        , ( "integrations", Integrations.encodeConfigs model.integrations )
         ]
 
 
 decoder : Decoder Model
 decoder =
-    Json.Decode.map Model <|
-        field "issues" IssueList.decoder
+    Json.Decode.map3 Model
+        ( field "issues" IssueList.decoder )
+        ( field "integrations" Integrations.decodeConfigs )
+        ( Json.Decode.succeed ( Time.millisToPosix 0 ) )
 
 
 saveNormalized model =
-    model |> normalizeState |> save
+    model |> encodeState |> save
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -88,7 +111,7 @@ update msg model =
             ( updatedModel
             , case submsg of
                 IssueList.SelectIssue _ ->
-                    Cmd.batch [ wrappedCmd, Cmd.map StopwatchMsg Stopwatch.refresh ]
+                    Cmd.batch [ wrappedCmd, refreshTime ]
 
                 IssueList.NewIssue ->
                     Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
@@ -97,28 +120,38 @@ update msg model =
                     wrappedCmd
             )
 
-        StopwatchMsg submsg ->
+        Tick time ->
+            ( { model | currentTime = time }, Cmd.none )
+
+        TimesheetMsg submsg ->
+            case getSelectedIssue model.issues of
+                Just selectedIssue ->
+                    let
+                        (updatedTimesheet, cmd) = Timesheet.update model.integrations submsg selectedIssue.timesheet
+                        wrappedCmd = Cmd.map TimesheetMsg cmd
+                        updatedIssue = { selectedIssue | timesheet = updatedTimesheet }
+                        updatedModel = { model | issues = IssueList.updateSelectedIssue model.issues updatedIssue }
+                    in
+                        ( updatedModel
+                        , case Timesheet.saveStateAdvised submsg of
+                            True -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
+                            False -> wrappedCmd
+                        )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        IntegrationConfigManagerMsg submsg ->
             let
-                selectedIssue =
-                    IssueList.getSelectedIssue model.issues
-
-                ( updatedStopwatch, cmd ) =
-                    Stopwatch.update submsg (getCurrentStopwatch model)
-
-                wrappedCmd =
-                    Cmd.map StopwatchMsg cmd
-
-                updatedModel =
-                    { model | issues = updateSelectedIssue model.issues { selectedIssue | stopwatch = updatedStopwatch } }
+                ( newIntegrationModel, integrationCmd)  = (Integrations.updateConfigManagers submsg model.integrations)
+                wrappedCmd = Cmd.map IntegrationConfigManagerMsg integrationCmd
+                updatedModel = { model | integrations = newIntegrationModel }
             in
-            ( updatedModel
-            , case Stopwatch.stateSaveAdvised submsg of
-                True ->
-                    Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
-
-                False ->
-                    wrappedCmd
-            )
+                ( updatedModel
+                , case Integrations.configsSaveAdvised submsg of
+                    True -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
+                    False -> wrappedCmd
+                )
 
 
 init : Flags -> ( Model, Cmd Msg )
@@ -128,9 +161,16 @@ init flags =
             model
 
         Err _ ->
-            { issues = IssueList.init }
-    , Cmd.map StopwatchMsg Stopwatch.refresh
+            { issues = IssueList.init
+            , integrations = Integrations.initConfigs
+            , currentTime = Time.millisToPosix 0
+            }
+
+    , refreshTime
     )
+
+refreshTime : Cmd Msg
+refreshTime = Task.perform Tick Time.now
 
 
 main =
@@ -138,5 +178,10 @@ main =
         { init = init
         , view = view
         , update = update
-        , subscriptions = \model -> Sub.map StopwatchMsg Stopwatch.subscriptions
+        , subscriptions =
+            \model ->
+                Sub.batch
+                    [ (Time.every 1000 Tick)
+                    , (Sub.map IntegrationConfigManagerMsg Integrations.subscriptions)
+                    ]
         }

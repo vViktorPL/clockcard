@@ -27,5 +27,8 @@
     "elm": "^0.19.0-bugfix2",
     "elm-test": "^0.19.0-beta12"
   },
-  "dependencies": {}
+  "dependencies": {
+    "electron-default-menu": "^1.0.1",
+    "time-elements": "^1.2.0"
+  }
 }

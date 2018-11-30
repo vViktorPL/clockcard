@@ -6,16 +6,23 @@ const BrowserWindow = electron.BrowserWindow;
 
 const path = require('path');
 const url = require('url');
+const { version: appVersion } = require('./package.json');
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow;
 
 function createWindow () {
+  // JIRA REST API fails when sending POST/PUT etc requests with browser-like User-Agent header
+  electron.session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    details.requestHeaders['User-Agent'] = `ClockCard App v${appVersion}`;
+    callback({ cancel: false, requestHeaders: details.requestHeaders });
+  });
+
   // Create the browser window.
   mainWindow = new BrowserWindow({
-    width: 700,
-    height: 500,
+    width: 900,
+    height: 700,
     resizable: false,
     fullscreenable: false,
     icon: path.join(__dirname, 'assets/icons/256x256.png'),
@@ -38,6 +45,8 @@ function createWindow () {
     // when you should delete the corresponding element.
     mainWindow = null;
   })
+
+  electron.Menu.setApplicationMenu(require('./menu')(mainWindow));
 }
 
 // This method will be called when Electron has finished

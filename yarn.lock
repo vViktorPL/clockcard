@@ -473,6 +473,10 @@ ecc-jsbn@~0.1.1:
   dependencies:
     jsbn "~0.1.0"
 
+electron-default-menu@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/electron-default-menu/-/electron-default-menu-1.0.1.tgz#3173c5018eb507404fec63bdf3b78c38eedba808"
+
 electron-download@^3.0.1:
   version "3.3.0"
   resolved "https://registry.yarnpkg.com/electron-download/-/electron-download-3.3.0.tgz#2cfd54d6966c019c4d49ad65fbe65cc9cdef68c8"
@@ -2268,6 +2272,10 @@ through2@~0.2.3:
 through@2:
   version "2.3.8"
   resolved "https://registry.yarnpkg.com/through/-/through-2.3.8.tgz#0dd4c9ffaabc357960b1b724115d7e0e86a2e1f5"
+
+time-elements@^1.2.0:
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/time-elements/-/time-elements-1.2.0.tgz#a8863cc0ba3bfd6a506fb8fe84fe72e0e0445405"
 
 tmp@0.0.28:
   version "0.0.28"

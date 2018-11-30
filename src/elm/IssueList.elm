@@ -6,15 +6,15 @@ import Html.Attributes exposing (class, classList, id, placeholder, type_)
 import Html.Events exposing (onBlur, onClick, onInput)
 import Html.Events.Extra exposing (onEnter)
 import Issue exposing (IssueId, Model)
-import Json.Decode exposing (Decoder, field, int)
-import Json.Encode exposing (Value, object)
+import Json.Decode as D exposing (Decoder)
+import Json.Encode as E exposing (Value)
 import SelectableList exposing (..)
-import Stopwatch exposing (Model)
 import Task exposing (attempt)
+import Timesheet
 
 
 type alias Model =
-    { list : SelectableList Issue.Model
+    { list : Maybe (SelectableList Issue.Model)
     , newIssueName : Maybe String
     , currentId : IssueId
     }
@@ -31,18 +31,9 @@ type Msg
 
 init : Model
 init =
-    { list =
-        SelectableList
-            { head = []
-            , selected =
-                { id = 1
-                , name = "Example issue"
-                , stopwatch = Stopwatch.blank
-                }
-            , tail = []
-            }
+    { list = Nothing
     , newIssueName = Nothing
-    , currentId = 2
+    , currentId = 1
     }
 
 
@@ -51,13 +42,15 @@ view model =
     div
         [ class "issue-list" ]
         ([ viewAddButton model.newIssueName ]
-            ++ viewIssues model.list
+            ++ (Maybe.map viewIssues model.list |> Maybe.withDefault [])
         )
 
 
 isIssueRunning : Issue.Model -> Bool
 isIssueRunning issue =
-    Stopwatch.isRunning issue.stopwatch
+    case Timesheet.getCurrentlyRunningPeriodStart issue.timesheet of
+        Just _ -> True
+        Nothing -> False
 
 
 viewIssues : SelectableList Issue.Model -> List (Html Msg)
@@ -106,16 +99,21 @@ viewAddButton newIssueName =
 
 updateListInModel : Model -> (SelectableList Issue.Model -> SelectableList Issue.Model) -> Model
 updateListInModel model updateList =
-    { model | list = updateList model.list }
+    { model | list = Maybe.map updateList model.list }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         SelectIssue issue ->
-            ( updateListInModel model (\list -> Maybe.withDefault model.list (SelectableList.select issue list))
-            , Cmd.none
-            )
+            case model.list of
+                Just issueList ->
+                    ( updateListInModel model (\list -> Maybe.withDefault issueList (SelectableList.select issue list))
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         PromptNewIssueName ->
             ( { model | newIssueName = Just "" }
@@ -153,14 +151,19 @@ update msg model =
                         newIssue =
                             { id = model.currentId
                             , name = newIssueName
-                            , stopwatch = Stopwatch.blank
+                            , timesheet = Timesheet.init
                             }
 
                         updatedList =
-                            SelectableList.prepend model.list newIssue
+                            case model.list of
+                                Just selectableList ->
+                                    (SelectableList.prepend selectableList newIssue)
+                                        |> SelectableList.select newIssue
+
+                                Nothing -> SelectableList.fromList [ newIssue ]
                     in
                     ( { model
-                        | list = Maybe.withDefault updatedList (SelectableList.select newIssue updatedList)
+                        | list = updatedList
                         , currentId = model.currentId + 1
                         , newIssueName = Nothing
                       }
@@ -168,32 +171,32 @@ update msg model =
                     )
 
 
-getSelectedIssue : Model -> Issue.Model
+getSelectedIssue : Model -> Maybe Issue.Model
 getSelectedIssue model =
-    SelectableList.getSelected model.list
+    Maybe.map SelectableList.getSelected model.list
 
 
 updateSelectedIssue : Model -> Issue.Model -> Model
 updateSelectedIssue model updatedIssue =
-    { model | list = SelectableList.mapSelected (\_ -> updatedIssue) model.list }
+    { model | list = Maybe.map (SelectableList.mapSelected (\_ -> updatedIssue)) model.list }
 
 
 normalize : Model -> Value
 normalize model =
-    object
-        [ ( "list", SelectableList.normalize Issue.normalize model.list )
-        , ( "currentId", Json.Encode.int model.currentId )
+    E.object
+        [ ( "list", Maybe.map (SelectableList.normalize Issue.normalize) model.list |> Maybe.withDefault E.null )
+        , ( "currentId", E.int model.currentId )
         ]
 
 
 decoder : Decoder Model
 decoder =
-    Json.Decode.map2
+    D.map2
         (\list currentId ->
             { list = list
             , currentId = currentId
             , newIssueName = Nothing
             }
         )
-        (field "list" (SelectableList.decoder Issue.decoder))
-        (field "currentId" int)
+        (D.field "list" (D.nullable (SelectableList.decoder Issue.decoder)))
+        (D.field "currentId" D.int)
