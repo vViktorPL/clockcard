@@ -1,10 +1,13 @@
-module Time.Extra exposing (posixDecoder, encodePosix, humanReadableDurationToSecs)
+module Time.Extra exposing (posixDecoder, encodePosix, humanReadableDurationToSecs, viewPosix, durationHumanReadable)
 
 import Time exposing (Posix)
 import Json.Decode as D exposing (Decoder)
 import Json.Encode as E exposing (Value)
 import Regex exposing (Regex)
 import Maybe.Extra
+import Html exposing (Html)
+import Html.Attributes exposing (attribute, datetime)
+import Iso8601
 
 posixDecoder : Decoder Posix
 posixDecoder =
@@ -52,3 +55,34 @@ humanReadableDurationRegex =
     Regex.fromString "^(\\d+h)?\\W?(\\d+m)?\\W?(\\d+s)?$"
         |> Maybe.withDefault Regex.never
 
+
+durationHumanReadable : Int -> String
+durationHumanReadable totalSecs =
+    if totalSecs == 0 then "0"
+    else
+        let
+            hours = totalSecs // 3600
+            minutes = (totalSecs - (hours * 3600)) // 60
+            secs =
+                if hours == 0 && minutes == 0 then
+                    totalSecs - (hours * 3600) - (minutes * 60)
+                else
+                    0
+        in
+            [ (hours, "h"), (minutes, "m"), (secs, "s") ]
+                |> List.filter (\(count, _) -> count > 0)
+                |> List.map (\(count, unit) -> String.fromInt count ++ unit)
+                |> String.join " "
+
+
+viewPosix : Posix -> Html msg
+viewPosix time =
+    Html.node "local-time"
+        [ datetime (Iso8601.fromTime time)
+        , attribute "day" "numeric"
+        , attribute "month" "short"
+        , attribute "year" "numeric"
+        , attribute "hour" "numeric"
+        , attribute "minute" "numeric"
+        ]
+        []

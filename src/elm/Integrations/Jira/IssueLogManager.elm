@@ -27,7 +27,7 @@ import Jira.Jql exposing (fieldEqualsExpression, literalStringToExpression)
 import Assets exposing (getImageUrl)
 import Integrations.Jira.Config exposing (getValidDestinations, ValidDestination, ProjectData)
 import MessageBox exposing (showErrorBox)
-import Time.Extra exposing (humanReadableDurationToSecs)
+import Time.Extra exposing (humanReadableDurationToSecs, viewPosix, durationHumanReadable)
 
 -- MODEL
 
@@ -361,7 +361,28 @@ viewLogRef (LogRef logRef) =
 
 viewLogTable : Model -> Html Msg
 viewLogTable (Model logs _ _) =
-    Html.text ""
+    Html.div []
+        [ Html.table []
+            ([ Html.tr []
+                [ Html.th [] [ Html.text "Ref" ]
+                , Html.th [] [ Html.text "Commit time" ]
+                , Html.th [] [ Html.text "JIRA issue" ]
+                , Html.th [] [ Html.text "Logged time" ]
+                ]
+            ] ++
+            ( List.map viewLogEntry logs )
+            )
+        ]
+
+
+viewLogEntry : Log -> Html Msg
+viewLogEntry log =
+    Html.tr []
+        [ Html.td [] [ viewLogRef log.ref ]
+        , Html.td [] [ viewPosix log.commitTime ]
+        , Html.td [] [ Html.a [ href log.issueUrl ] [ Html.text log.issueKey ] ]
+        , Html.td [] [ Html.text ( durationHumanReadable log.loggedTime) ]
+        ]
 
 viewForm : Config -> Model -> Html Msg
 viewForm config (Model _ maybeForm _) =

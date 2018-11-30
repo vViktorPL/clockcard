@@ -3,7 +3,7 @@
 require('time-elements');
 require('./datetime-picker');
 
-const { ipcRenderer, remote } = require('electron');
+const { ipcRenderer, remote, shell } = require('electron');
 
 const { Elm: { Main: ElmApp } } = require('./elm.js');
 const initialState = localStorage.getItem('state');
@@ -32,15 +32,22 @@ app.ports.showElectronErrorBox.subscribe(
 );
 
 // Action links router
-addChildEventListener(document, 'click', 'a[href^="clockcard:"]', function (event) {
+addChildEventListener(document, 'click', 'a', function (event) {
   event.preventDefault();
-  const action = this.href.split(':')[1];
-  switch (action) {
-    case 'jira-config-manager':
-      app.ports.showJiraManager.send(null);
-      break;
+
+  const [protocol, ...afterProtocol] = this.href.split(':');
+
+  if (protocol === 'clockcard') {
+    const action = afterProtocol[0];
+    switch (action) {
+      case 'jira-config-manager':
+        app.ports.showJiraManager.send(null);
+        break;
+    }
+    return;
   }
 
+  shell.openExternal(this.href);
 });
 
 function addChildEventListener(base, eventName, selector, handler) {

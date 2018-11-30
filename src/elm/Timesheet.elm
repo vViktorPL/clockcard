@@ -19,13 +19,12 @@ import Json.Encode as E exposing (Value)
 import Json.Decode as D exposing (Decoder)
 import Html.Events exposing (onClick)
 
-import Time.Extra exposing (posixDecoder, encodePosix)
+import Time.Extra exposing (posixDecoder, encodePosix, viewPosix, durationHumanReadable)
 import Integrations exposing (LogRef, getJiraConfig)
 import Integrations.Jira.Config
 import Integrations.Jira.IssueLogManager as JiraIssueLogManager
 import Stopwatch
 import Task
-import Triple
 
 type Msg
     = SwitchTab Tab
@@ -185,15 +184,19 @@ view integrationsConfigs (Timesheet model) currentTime =
     in
     Html.div [ class "selected-item-form" ]
         [ viewStopwatch model currentTime formOpened
-        , Html.div [ class "timesheet" ]
+        , Html.div [ classList [("timesheet", True), ("collapsed", List.isEmpty model.finishedPeriods)] ]
             [ Html.div [ class "tabs" ]
                 [ viewTab model PeriodsTab "Periods"
                 , viewTab model JiraTab "Jira Log"
                 ]
             , Html.fieldset [ class "timesheet__tab-content", disabled formOpened ]
                 [ case model.currentTab of
-                      PeriodsTab -> viewPeriodsTab (Timesheet model)
-                      JiraTab -> Html.div [] [ Html.text "Jira Log tab not implemented yet" ]
+                      PeriodsTab ->
+                        viewPeriodsTab (Timesheet model)
+
+                      JiraTab ->
+                        Html.map JiraIssueLogManagerMsg
+                            (JiraIssueLogManager.viewLogTable model.integrations.jira)
                 ]
             ]
         ,  Html.map JiraIssueLogManagerMsg
@@ -262,23 +265,7 @@ duration : Posix -> Posix -> Int
 duration start end =
      ((Time.posixToMillis end) - (Time.posixToMillis start)) // 1000
 
-durationHumanReadable : Int -> String
-durationHumanReadable totalSecs =
-    if totalSecs == 0 then "0"
-    else
-        let
-            hours = totalSecs // 3600
-            minutes = (totalSecs - (hours * 3600)) // 60
-            secs =
-                if hours == 0 && minutes == 0 then
-                    totalSecs - (hours * 3600) - (minutes * 60)
-                else
-                    0
-        in
-            [ (hours, "h"), (minutes, "m"), (secs, "s") ]
-                |> List.filter (\(count, _) -> count > 0)
-                |> List.map (\(count, unit) -> String.fromInt count ++ unit)
-                |> String.join " "
+
 
 viewPeriodsTab : Model -> Html Msg
 viewPeriodsTab (Timesheet model) =
@@ -335,17 +322,6 @@ viewPeriodRow (selected, period) =
         , Html.td [] (List.map Integrations.viewLogRef integrations)
         ]
 
-viewPosix : Posix -> Html msg
-viewPosix time =
-    Html.node "local-time"
-        [ datetime (Iso8601.fromTime time)
-        , attribute "day" "numeric"
-        , attribute "month" "short"
-        , attribute "year" "numeric"
-        , attribute "hour" "numeric"
-        , attribute "minute" "numeric"
-        ]
-        []
 
 periodToDuration : Period -> Int
 periodToDuration (Period start end _) = duration start end

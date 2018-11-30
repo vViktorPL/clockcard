@@ -2,7 +2,7 @@ port module Main exposing (main)
 
 import Browser
 import Html exposing (Html, div)
-import Html.Attributes exposing (id)
+import Html.Attributes exposing (id, class, style)
 import IssueList exposing (..)
 import Timesheet
 import Json.Decode exposing (Decoder, decodeValue, field, at)
@@ -37,20 +37,40 @@ type alias Flags =
     Value
 
 
-getCurrentTimesheet : Model -> Timesheet.Model
+getCurrentTimesheet : Model -> Maybe Timesheet.Model
 getCurrentTimesheet model =
     model.issues
         |> IssueList.getSelectedIssue
-        |> .timesheet
+        |> Maybe.map .timesheet
 
 view : Model -> Html Msg
 view model =
     div
         [ id "container" ]
         [ Html.map IssueListMsg (IssueList.view model.issues)
-        , Html.map TimesheetMsg (Timesheet.view model.integrations (getCurrentTimesheet model) model.currentTime)
+        , viewIssuePanel model
         , Html.map IntegrationConfigManagerMsg (Integrations.viewConfigManagers model.integrations)
         ]
+
+
+viewIssuePanel : Model -> Html Msg
+viewIssuePanel model =
+    case getCurrentTimesheet model of
+        Just currentTimesheet ->
+            Html.map TimesheetMsg (Timesheet.view model.integrations currentTimesheet model.currentTime)
+
+        Nothing ->
+            Html.div [ class "big-placeholder-message"]
+                [ Html.div [ class "big-icon" ] [ Html.text "👋"]
+                , Html.strong [] [ Html.text "Hello there!" ]
+                , Html.p []
+                    [ Html.text "To create your first time-tracked issue"
+                    , Html.br [] []
+                    , Html.text "please click \""
+                    , Html.strong [] [ Html.text "+ New issue" ]
+                    , Html.text "\" on the left pane."
+                    ]
+                ]
 
 
 encodeState : Model -> Value
@@ -104,18 +124,22 @@ update msg model =
             ( { model | currentTime = time }, Cmd.none )
 
         TimesheetMsg submsg ->
-            let
-                selectedIssue = getSelectedIssue model.issues
-                (updatedTimesheet, cmd) = Timesheet.update model.integrations submsg selectedIssue.timesheet
-                wrappedCmd = Cmd.map TimesheetMsg cmd
-                updatedIssue = { selectedIssue | timesheet = updatedTimesheet }
-                updatedModel = { model | issues = IssueList.updateSelectedIssue model.issues updatedIssue }
-            in
-                ( updatedModel
-                , case Timesheet.saveStateAdvised submsg of
-                    True -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
-                    False -> wrappedCmd
-                )
+            case getSelectedIssue model.issues of
+                Just selectedIssue ->
+                    let
+                        (updatedTimesheet, cmd) = Timesheet.update model.integrations submsg selectedIssue.timesheet
+                        wrappedCmd = Cmd.map TimesheetMsg cmd
+                        updatedIssue = { selectedIssue | timesheet = updatedTimesheet }
+                        updatedModel = { model | issues = IssueList.updateSelectedIssue model.issues updatedIssue }
+                    in
+                        ( updatedModel
+                        , case Timesheet.saveStateAdvised submsg of
+                            True -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
+                            False -> wrappedCmd
+                        )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         IntegrationConfigManagerMsg submsg ->
             let

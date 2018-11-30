@@ -29,6 +29,7 @@ body {
 
 .selected-item-form {
     flex: 1;
+    transition: opacity 2s;
 }
 
 .issue-list {
@@ -345,5 +346,10 @@ fieldset[disabled] {
 }
 
 .big-placeholder-message {
-  padding: 0 50px;
+    padding: 20px 50px;
+    width: 100%;
+}
+
+table {
+    width: 100%;
 }
