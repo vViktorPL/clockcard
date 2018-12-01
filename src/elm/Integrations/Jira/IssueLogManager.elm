@@ -1,76 +1,93 @@
 module Integrations.Jira.IssueLogManager exposing
-    ( Model, LogRef
-    , Msg, OutputMsg(..)
-    , FormInitData
+    ( FormInitData
+    , LogRef
+    , Model
+    , Msg
+    , OutputMsg(..)
+    , decoder
+    , encode
+    , encodeLogRef
     , init
+    , isFormOpened
+    , logRefDecoder
+    , openForm
     , update
-    , viewLogTable, viewLogRef, viewForm
-    , openForm, isFormOpened
-    , decoder, logRefDecoder
-    , encode, encodeLogRef
+    , viewForm
+    , viewLogRef
+    , viewLogTable
     )
 
-import Time exposing (Posix)
-import List.Extra exposing (find)
-import Json.Encode as E exposing (Value)
-import Json.Decode as D exposing (Decoder)
-import Html exposing (Html)
-import Html.Attributes exposing (src, value, selected, class, placeholder, classList, href)
-import Html.Events exposing (onClick, on, targetValue, onInput)
-import Task
-import Iso8601
-import Debounce exposing (Debounce)
-import Jira.Api
-import Jira.Pagination exposing (PageRequest, pageRequest, paginationConfig)
-import Jira.Jql exposing (fieldEqualsExpression, literalStringToExpression)
-
 import Assets exposing (getImageUrl)
-import Integrations.Jira.Config exposing (getValidDestinations, ValidDestination, ProjectData)
+import Debounce exposing (Debounce)
+import Html exposing (Html)
+import Html.Attributes exposing (class, classList, href, placeholder, selected, src, value)
+import Html.Events exposing (on, onClick, onInput, targetValue)
+import Integrations.Jira.Config exposing (ProjectData, ValidDestination, getValidDestinations)
+import Iso8601
+import Jira.Api
+import Jira.Jql exposing (fieldEqualsExpression, literalStringToExpression)
+import Jira.Pagination exposing (PageRequest, pageRequest, paginationConfig)
+import Json.Decode as D exposing (Decoder)
+import Json.Encode as E exposing (Value)
+import List.Extra exposing (find)
 import MessageBox exposing (showErrorBox)
-import Time.Extra exposing (humanReadableDurationToSecs, viewPosix, durationHumanReadable)
+import Task
+import Time exposing (Posix)
+import Time.Extra exposing (durationHumanReadable, humanReadableDurationToSecs, viewPosix)
+
+
 
 -- MODEL
 
-type Model = Model (List Log) (Maybe NewEntryForm) Int
 
-type alias Config = Integrations.Jira.Config.Model
+type Model
+    = Model (List Log) (Maybe NewEntryForm) Int
+
+
+type alias Config =
+    Integrations.Jira.Config.Model
+
 
 type alias Log =
-    { ref: LogRef
-    , issueKey: String
-    , issueUrl: String
-    , loggedTime: Int
-    , commitTime: Posix
+    { ref : LogRef
+    , issueKey : String
+    , issueUrl : String
+    , loggedTime : Int
+    , commitTime : Posix
     }
 
-type LogRef = LogRef Int
+
+type LogRef
+    = LogRef Int
 
 
 type NewEntryForm
     = NewEntryForm
-        { submitting: Bool
+        { submitting : Bool
 
         -- Destination
-        , selectedDestination: Maybe ValidDestination
+        , selectedDestination : Maybe ValidDestination
 
         -- Project
-        , selectedProject: Maybe ProjectData
+        , selectedProject : Maybe ProjectData
 
         -- Issues
-        , selectedIssue: Maybe Jira.Api.Issue
-        , issueQuery: String
-        , issueQueryResult: List Jira.Api.Issue
-        , issueSearchDebouncer: Debounce String
+        , selectedIssue : Maybe Jira.Api.Issue
+        , issueQuery : String
+        , issueQueryResult : List Jira.Api.Issue
+        , issueSearchDebouncer : Debounce String
 
         -- Date & time
-        , startDate: String
-        , duration: String
+        , startDate : String
+        , duration : String
         }
 
+
 type alias FormInitData =
-    { logStartDate: Posix
-    , logDuration: String
+    { logStartDate : Posix
+    , logDuration : String
     }
+
 
 debounceConfig : Debounce.Config FormMsg
 debounceConfig =
@@ -78,17 +95,22 @@ debounceConfig =
     , transform = SearchIssuesDebounce
     }
 
+
+
 -- MESSAGES
+
 
 type Msg
     = FormMsg FormMsg
     | TableMsg TableMsg
-    | SubmitResponse (Result Jira.Api.ApiCallError (Jira.Api.Issue, Jira.Api.Worklog))
+    | SubmitResponse (Result Jira.Api.ApiCallError ( Jira.Api.Issue, Jira.Api.Worklog ))
     | CancelForm
     | RequestConfigManagerToShow
 
+
 type TableMsg
     = NoOp
+
 
 type FormMsg
     = SelectDestination String
@@ -107,10 +129,15 @@ type OutputMsg
     = OutputNoOp
     | WorkLogAdded LogRef
 
+
+
 -- INIT
 
+
 init : Model
-init = Model [] Nothing 1
+init =
+    Model [] Nothing 1
+
 
 initForm : NewEntryForm
 initForm =
@@ -126,7 +153,10 @@ initForm =
         , duration = ""
         }
 
+
+
 -- UPDATE
+
 
 openForm : Model -> FormInitData -> Model
 openForm (Model logs _ currentIndex) { logStartDate, logDuration } =
@@ -144,78 +174,82 @@ openForm (Model logs _ currentIndex) { logStartDate, logDuration } =
                 , duration = logDuration
                 }
     in
-    (Model logs (Just form) currentIndex)
+    Model logs (Just form) currentIndex
 
 
-update : Config -> Msg -> Model -> (Model, Cmd Msg, OutputMsg)
+update : Config -> Msg -> Model -> ( Model, Cmd Msg, OutputMsg )
 update config msg model =
-    case (msg, model) of
-        (FormMsg formMsg, (Model logs (Just form) currentLogSequence)) ->
+    case ( msg, model ) of
+        ( FormMsg formMsg, Model logs (Just form) currentLogSequence ) ->
             let
-                (updatedForm, cmd, outputMsg) = updateForm config formMsg form
+                ( updatedForm, cmd, outputMsg ) =
+                    updateForm config formMsg form
             in
-                ( (Model logs (Just updatedForm) currentLogSequence)
-                , cmd
-                , outputMsg
-                )
-        (SubmitResponse (Ok (issue, worklog)), (Model logs _ currentLogSequence) ) ->
+            ( Model logs (Just updatedForm) currentLogSequence
+            , cmd
+            , outputMsg
+            )
+
+        ( SubmitResponse (Ok ( issue, worklog )), Model logs _ currentLogSequence ) ->
             let
-                jiraWorklogData = Jira.Api.getWorklogData worklog
+                jiraWorklogData =
+                    Jira.Api.getWorklogData worklog
 
-                newLog = Log
-                    (LogRef currentLogSequence)
-                    (Jira.Api.getIssueKey issue)
-                    (urlFromJiraIssue issue)
-                    jiraWorklogData.timeSpentSeconds
-                    jiraWorklogData.created
-
+                newLog =
+                    Log
+                        (LogRef currentLogSequence)
+                        (Jira.Api.getIssueKey issue)
+                        (urlFromJiraIssue issue)
+                        jiraWorklogData.timeSpentSeconds
+                        jiraWorklogData.created
             in
-            ( Model (logs ++ [ newLog ]) Nothing (currentLogSequence+1)
+            ( Model (logs ++ [ newLog ]) Nothing (currentLogSequence + 1)
             , Cmd.none
             , WorkLogAdded newLog.ref
             )
 
-        (SubmitResponse (Err _), (Model _ (Just form) _)) ->
+        ( SubmitResponse (Err _), Model _ (Just form) _ ) ->
             ( model
             , showErrorBox "JIRA log error" "Something went wrong during adding the worklog to issue"
             , OutputNoOp
             )
 
-        (CancelForm, Model logs _ currentLogSequence) ->
+        ( CancelForm, Model logs _ currentLogSequence ) ->
             ( Model logs Nothing currentLogSequence
             , Cmd.none
             , OutputNoOp
             )
 
         _ ->
-            (model, Cmd.none, OutputNoOp)
+            ( model, Cmd.none, OutputNoOp )
 
 
-updateForm : Config -> FormMsg -> NewEntryForm -> (NewEntryForm, Cmd Msg, OutputMsg)
+updateForm : Config -> FormMsg -> NewEntryForm -> ( NewEntryForm, Cmd Msg, OutputMsg )
 updateForm config msg (NewEntryForm form) =
     case msg of
         SelectDestination destinationId ->
             ( NewEntryForm
                 { form
-                | selectedDestination =
-                    find (\dest -> dest.id == destinationId) (getValidDestinations config)
-                , selectedProject = Nothing
-                , selectedIssue = Nothing
-                , issueQuery = ""
-                , issueQueryResult = []
-                , issueSearchDebouncer = Debounce.init
+                    | selectedDestination =
+                        find (\dest -> dest.id == destinationId) (getValidDestinations config)
+                    , selectedProject = Nothing
+                    , selectedIssue = Nothing
+                    , issueQuery = ""
+                    , issueQueryResult = []
+                    , issueSearchDebouncer = Debounce.init
                 }
             , Cmd.none
             , OutputNoOp
             )
 
-        SelectProject projectId -> -- TODO UPDATE DEBOUNCER ALSO IN THIS CASE
+        SelectProject projectId ->
+            -- TODO UPDATE DEBOUNCER ALSO IN THIS CASE
             ( NewEntryForm
                 { form
-                | selectedProject =
-                    form.selectedDestination
-                        |> Maybe.map .projects
-                        |> Maybe.andThen (find (\proj -> proj.id == projectId))
+                    | selectedProject =
+                        form.selectedDestination
+                            |> Maybe.map .projects
+                            |> Maybe.andThen (find (\proj -> proj.id == projectId))
                 }
             , Cmd.none
             , OutputNoOp
@@ -252,8 +286,8 @@ updateForm config msg (NewEntryForm form) =
             in
             ( NewEntryForm
                 { form
-                | issueQuery = query
-                , issueSearchDebouncer = updatedDebouncer
+                    | issueQuery = query
+                    , issueSearchDebouncer = updatedDebouncer
                 }
             , Cmd.map FormMsg debouncerCmd
             , OutputNoOp
@@ -266,7 +300,7 @@ updateForm config msg (NewEntryForm form) =
                         ( updatedDebouncer, debouncerCmd ) =
                             Debounce.update
                                 debounceConfig
-                                (Debounce.takeLast (searchIssues destination form.selectedProject) )
+                                (Debounce.takeLast (searchIssues destination form.selectedProject))
                                 debouncerMsg
                                 form.issueSearchDebouncer
                     in
@@ -275,12 +309,13 @@ updateForm config msg (NewEntryForm form) =
                     , OutputNoOp
                     )
 
-                Nothing -> (NewEntryForm form, Cmd.none, OutputNoOp)
+                Nothing ->
+                    ( NewEntryForm form, Cmd.none, OutputNoOp )
 
         IssuesQueryResult (Ok issues) ->
             ( NewEntryForm
                 { form
-                | issueQueryResult = issues
+                    | issueQueryResult = issues
                 }
             , Cmd.none
             , OutputNoOp
@@ -300,7 +335,6 @@ updateForm config msg (NewEntryForm form) =
                     , OutputNoOp
                     )
 
-
         _ ->
             ( NewEntryForm form
             , Cmd.none
@@ -308,32 +342,29 @@ updateForm config msg (NewEntryForm form) =
             )
 
 
-type ValidatedFormValues =
-    ValidatedFormValues
-        (Maybe Jira.Api.Cred)
-        (Maybe Jira.Api.Issue)
-        (Maybe Posix)
-        (Maybe Int)
+type ValidatedFormValues
+    = ValidatedFormValues (Maybe Jira.Api.Cred) (Maybe Jira.Api.Issue) (Maybe Posix) (Maybe Int)
 
 
 logToJira : NewEntryForm -> Result String (Cmd Msg)
 logToJira (NewEntryForm form) =
     case
         ValidatedFormValues
-            (form.selectedDestination |> Maybe.map (.cred))
-            (form.selectedIssue)
+            (form.selectedDestination |> Maybe.map .cred)
+            form.selectedIssue
             (Iso8601.toTime form.startDate |> Result.toMaybe)
             (humanReadableDurationToSecs form.duration)
     of
         ValidatedFormValues (Just cred) (Just issue) (Just startDate) (Just durationSecs) ->
-            Jira.Api.addWorklog cred issue
+            Jira.Api.addWorklog cred
+                issue
                 { started = startDate
                 , timeSpentSeconds = durationSecs
                 , comment = Nothing
                 }
-            |> Task.map (Tuple.pair issue)
-            |> Task.attempt SubmitResponse
-            |> Ok
+                |> Task.map (Tuple.pair issue)
+                |> Task.attempt SubmitResponse
+                |> Ok
 
         ValidatedFormValues Nothing _ _ _ ->
             Err "You have to select destination JIRA"
@@ -355,9 +386,10 @@ logToJira (NewEntryForm form) =
 viewLogRef : LogRef -> Html msg
 viewLogRef (LogRef logRef) =
     Html.div []
-        [ Html.img [src (getImageUrl "jira-icon.svg")] []
+        [ Html.img [ src (getImageUrl "jira-icon.svg") ] []
         , Html.text ("#" ++ String.fromInt logRef)
         ]
+
 
 viewLogTable : Model -> Html Msg
 viewLogTable (Model logs _ _) =
@@ -369,8 +401,8 @@ viewLogTable (Model logs _ _) =
                 , Html.th [] [ Html.text "JIRA issue" ]
                 , Html.th [] [ Html.text "Logged time" ]
                 ]
-            ] ++
-            ( List.map viewLogEntry logs )
+             ]
+                ++ List.map viewLogEntry logs
             )
         ]
 
@@ -381,22 +413,23 @@ viewLogEntry log =
         [ Html.td [] [ viewLogRef log.ref ]
         , Html.td [] [ viewPosix log.commitTime ]
         , Html.td [] [ Html.a [ href log.issueUrl ] [ Html.text log.issueKey ] ]
-        , Html.td [] [ Html.text ( durationHumanReadable log.loggedTime) ]
+        , Html.td [] [ Html.text (durationHumanReadable log.loggedTime) ]
         ]
+
 
 viewForm : Config -> Model -> Html Msg
 viewForm config (Model _ maybeForm _) =
-    Html.div [ classList [("jira-log-form", True), ("collapsed", maybeForm == Nothing)]]
-        [ viewFormInternal (getValidDestinations config) ( maybeForm |> Maybe.withDefault initForm)
+    Html.div [ classList [ ( "jira-log-form", True ), ( "collapsed", maybeForm == Nothing ) ] ]
+        [ viewFormInternal (getValidDestinations config) (maybeForm |> Maybe.withDefault initForm)
         ]
 
 
 viewFormInternal : List ValidDestination -> NewEntryForm -> Html Msg
 viewFormInternal availableDestinations (NewEntryForm form) =
-    ( case availableDestinations of
+    case availableDestinations of
         [] ->
             Html.div [ class "big-placeholder-message" ]
-                [ Html.span [ class "big-icon" ] [ Html.text "🤔" ]
+                [ Html.span [ class "big-icon" ] [ Html.text "\u{1F914}" ]
                 , Html.strong [] [ Html.text "Hmm... It seems that there is no JIRA destination available." ]
                 , Html.p []
                     [ Html.text "However, you can "
@@ -415,7 +448,7 @@ viewFormInternal availableDestinations (NewEntryForm form) =
             Html.div []
                 [ Html.h2 [] [ Html.text "Log work to JIRA" ]
                 , Html.map FormMsg
-                    ( Html.div []
+                    (Html.div []
                         [ viewFormInput "Select JIRA"
                             (viewDestinationsSelect availableDestinations form.selectedDestination)
                         , viewFormInput "Select project"
@@ -432,7 +465,6 @@ viewFormInternal availableDestinations (NewEntryForm form) =
                 , Html.button [ onClick (FormMsg Submit) ] [ Html.text "Submit worklog" ]
                 ]
 
-    )
 
 viewFormInput : String -> Html msg -> Html msg
 viewFormInput label input =
@@ -445,17 +477,15 @@ viewFormInput label input =
 viewDestinationsSelect : List ValidDestination -> Maybe ValidDestination -> Html FormMsg
 viewDestinationsSelect availableDestinations selectedDestination =
     Html.select [ onChange SelectDestination ]
-        (
-            ( Html.option
-                [ value "", selected (selectedDestination == Nothing) ]
-                [ Html.text "-"]
-            ) ::
-            List.map
-                ( \destination ->
+        (Html.option
+            [ value "", selected (selectedDestination == Nothing) ]
+            [ Html.text "-" ]
+            :: List.map
+                (\destination ->
                     Html.option
                         [ value destination.id
                         , selected
-                            ( selectedDestination
+                            (selectedDestination
                                 |> Maybe.map ((==) destination)
                                 |> Maybe.withDefault False
                             )
@@ -465,38 +495,39 @@ viewDestinationsSelect availableDestinations selectedDestination =
                 availableDestinations
         )
 
+
 viewProjectsSelect : Maybe ValidDestination -> Maybe ProjectData -> Html FormMsg
 viewProjectsSelect selectedDestination selectedProject =
     Html.select [ onChange SelectProject ]
-        (
-            ( Html.option
-                [ value "", selected (selectedProject == Nothing) ]
-                [ Html.text "Any"]
-            ) ::
-            case selectedDestination of
-                Just destination ->
-                    ( List.map
-                        (\project ->
-                            Html.option
-                                [ value project.id
-                                , selected
-                                    ( selectedProject
-                                        |> Maybe.map (.id)
-                                        |> Maybe.map ((==) project.id)
-                                        |> Maybe.withDefault False
-                                    )
-                                ]
-                                [ Html.text (project.name ++ " (" ++ project.key ++ ")")]
-                        )
-                        destination.projects
-                    )
+        (Html.option
+            [ value "", selected (selectedProject == Nothing) ]
+            [ Html.text "Any" ]
+            :: (case selectedDestination of
+                    Just destination ->
+                        List.map
+                            (\project ->
+                                Html.option
+                                    [ value project.id
+                                    , selected
+                                        (selectedProject
+                                            |> Maybe.map .id
+                                            |> Maybe.map ((==) project.id)
+                                            |> Maybe.withDefault False
+                                        )
+                                    ]
+                                    [ Html.text (project.name ++ " (" ++ project.key ++ ")") ]
+                            )
+                            destination.projects
 
-                Nothing -> []
+                    Nothing ->
+                        []
+               )
         )
+
 
 viewIssueSelect : String -> List Jira.Api.Issue -> Maybe Jira.Api.Issue -> Html FormMsg
 viewIssueSelect issueQuery issueQueryResult selectedIssue =
-    ( case selectedIssue of
+    case selectedIssue of
         Just issue ->
             Html.div [ onClick ClearIssue ] [ viewIssue issue ]
 
@@ -508,24 +539,25 @@ viewIssueSelect issueQuery issueQueryResult selectedIssue =
                         (List.map viewPromptItem issueQueryResult)
                     ]
                 ]
-    )
 
 
 viewPromptItem : Jira.Api.Issue -> Html FormMsg
 viewPromptItem issue =
     Html.div [ onClick (SelectIssue issue), class "prompt__item" ] [ viewIssue issue ]
 
+
 viewIssue : Jira.Api.Issue -> Html FormMsg
 viewIssue issue =
     Jira.Api.getIssueFields issue
         |> D.decodeValue
-            ( D.map3
-                ( \icon key summary -> Html.div [ class "jira-issue"]
-                    [ Html.img [ src icon ] []
-                    , Html.text ("[" ++ key ++ "] " ++ summary)
-                    ]
+            (D.map3
+                (\icon key summary ->
+                    Html.div [ class "jira-issue" ]
+                        [ Html.img [ src icon ] []
+                        , Html.text ("[" ++ key ++ "] " ++ summary)
+                        ]
                 )
-                (D.at ["issuetype", "iconUrl"] D.string)
+                (D.at [ "issuetype", "iconUrl" ] D.string)
                 (D.succeed (Jira.Api.getIssueKey issue))
                 (D.field "summary" D.string)
             )
@@ -534,22 +566,27 @@ viewIssue issue =
 
 onLocalizedDateChange : (String -> msg) -> Html.Attribute msg
 onLocalizedDateChange msg =
-    on "localizedChange" (D.at ["detail", "value"] D.string |> D.map msg)
+    on "localizedChange" (D.at [ "detail", "value" ] D.string |> D.map msg)
+
 
 viewStartDatePicker : String -> Html FormMsg
 viewStartDatePicker startDate =
     Html.node "datetime-picker" [ value startDate, onLocalizedDateChange ChangeStartDate ] []
 
+
 viewDuration : String -> Html FormMsg
 viewDuration duration =
     Html.input [ value duration, onInput ChangeDuration ] []
+
 
 onChange : (String -> msg) -> Html.Attribute msg
 onChange msg =
     on "change" (D.map msg targetValue)
 
 
+
 -- DECODER
+
 
 decoder : Decoder Model
 decoder =
@@ -557,6 +594,7 @@ decoder =
         (D.field "logs" (D.list logDecoder))
         (D.succeed Nothing)
         (D.field "nextRefIndex" D.int)
+
 
 logDecoder : Decoder Log
 logDecoder =
@@ -572,57 +610,74 @@ logRefDecoder : Decoder LogRef
 logRefDecoder =
     D.map LogRef D.int
 
+
+
 -- ENCODE
+
 
 encode : Model -> Value
 encode (Model logs _ nextRefIndex) =
     E.object
-        [ ("logs", E.list encodeLog logs)
-        , ("nextRefIndex", E.int nextRefIndex)
+        [ ( "logs", E.list encodeLog logs )
+        , ( "nextRefIndex", E.int nextRefIndex )
         ]
 
 
 encodeLog : Log -> Value
 encodeLog log =
     E.object
-        [ ("ref", encodeLogRef log.ref )
-        , ("issueKey", E.string log.issueKey)
-        , ("issueUrl", E.string log.issueUrl)
-        , ("loggedTime", E.int log.loggedTime)
-        , ("commitTime", Iso8601.encode log.commitTime)
+        [ ( "ref", encodeLogRef log.ref )
+        , ( "issueKey", E.string log.issueKey )
+        , ( "issueUrl", E.string log.issueUrl )
+        , ( "loggedTime", E.int log.loggedTime )
+        , ( "commitTime", Iso8601.encode log.commitTime )
         ]
+
 
 encodeLogRef : LogRef -> Value
 encodeLogRef (LogRef logRefIndex) =
     E.int logRefIndex
 
+
+
 -- OTHER
 
+
 type alias IssueSearchQuery =
-    { jiraCred: Maybe Jira.Api.Cred
-    , project: Maybe String
-    , query: String
+    { jiraCred : Maybe Jira.Api.Cred
+    , project : Maybe String
+    , query : String
     }
+
 
 isFormOpened : Model -> Bool
 isFormOpened (Model _ maybeForm _) =
     case maybeForm of
-        Just _ -> True
-        Nothing -> False
+        Just _ ->
+            True
+
+        Nothing ->
+            False
 
 
 first20items : PageRequest
-first20items = pageRequest (paginationConfig 20) 1
+first20items =
+    pageRequest (paginationConfig 20) 1
+
 
 searchIssues : ValidDestination -> Maybe ProjectData -> String -> Cmd FormMsg
 searchIssues destination project query =
     let
         jql =
-            ( case project of
-                Just projectData -> ((fieldEqualsExpression "project" projectData.id) ++ " AND ")
-                Nothing -> ""
+            (case project of
+                Just projectData ->
+                    fieldEqualsExpression "project" projectData.id ++ " AND "
+
+                Nothing ->
+                    ""
             )
-            ++ "text ~ " ++ (literalStringToExpression (query ++ "*"))
+                ++ "text ~ "
+                ++ literalStringToExpression (query ++ "*")
     in
     Jira.Api.getIssues destination.cred first20items jql []
         |> Task.map Jira.Pagination.getItems
@@ -632,8 +687,8 @@ searchIssues destination project query =
 urlFromJiraIssue : Jira.Api.Issue -> String
 urlFromJiraIssue issue =
     Jira.Api.getIssueFields issue
-        |> D.decodeValue ( D.at ["project", "self"] D.string)
+        |> D.decodeValue (D.at [ "project", "self" ] D.string)
         |> Result.toMaybe
-        |> Maybe.andThen ( List.head << (String.split "/rest/") )
-        |> Maybe.map (\jiraUrl -> jiraUrl ++ "/browse/" ++ (Jira.Api.getIssueKey issue))
+        |> Maybe.andThen (List.head << String.split "/rest/")
+        |> Maybe.map (\jiraUrl -> jiraUrl ++ "/browse/" ++ Jira.Api.getIssueKey issue)
         |> Maybe.withDefault ""

@@ -49,8 +49,11 @@ view model =
 isIssueRunning : Issue.Model -> Bool
 isIssueRunning issue =
     case Timesheet.getCurrentlyRunningPeriodStart issue.timesheet of
-        Just _ -> True
-        Nothing -> False
+        Just _ ->
+            True
+
+        Nothing ->
+            False
 
 
 viewIssues : SelectableList Issue.Model -> List (Html Msg)
@@ -157,10 +160,11 @@ update msg model =
                         updatedList =
                             case model.list of
                                 Just selectableList ->
-                                    (SelectableList.prepend selectableList newIssue)
+                                    SelectableList.prepend selectableList newIssue
                                         |> SelectableList.select newIssue
 
-                                Nothing -> SelectableList.fromList [ newIssue ]
+                                Nothing ->
+                                    SelectableList.fromList [ newIssue ]
                     in
                     ( { model
                         | list = updatedList

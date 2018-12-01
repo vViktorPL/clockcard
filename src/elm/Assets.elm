@@ -1,6 +1,9 @@
 module Assets exposing (getImageUrl)
 
-assetsRoot = "../../assets"
+
+assetsRoot =
+    "../../assets"
+
 
 getImageUrl : String -> String
 getImageUrl filename =

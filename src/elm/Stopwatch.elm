@@ -1,12 +1,17 @@
 module Stopwatch exposing (Model, paused, running, view)
 
-import Time exposing (Posix)
 import Html exposing (Html)
+import Time exposing (Posix)
 
-type Model = RunningStopwatch Int Posix | PausedStopwatch Int
+
+type Model
+    = RunningStopwatch Int Posix
+    | PausedStopwatch Int
+
 
 paused cumulatedTicks =
     PausedStopwatch cumulatedTicks
+
 
 running cumulatedTicks startTime =
     RunningStopwatch cumulatedTicks startTime
@@ -14,16 +19,21 @@ running cumulatedTicks startTime =
 
 view : Model -> Posix -> Html msg
 view model currentTime =
-    ( case model of
-        PausedStopwatch cumulatedTicks -> cumulatedTicks
-        RunningStopwatch cumulatedTicks startTime -> cumulatedTicks + (timeDiffInSecs currentTime startTime)
+    (case model of
+        PausedStopwatch cumulatedTicks ->
+            cumulatedTicks
+
+        RunningStopwatch cumulatedTicks startTime ->
+            cumulatedTicks + timeDiffInSecs currentTime startTime
     )
         |> formatTicks
         |> Html.text
 
+
 timeDiffInSecs : Posix -> Posix -> Int
 timeDiffInSecs time1 time2 =
-  (Time.posixToMillis time1 - Time.posixToMillis time2) // 1000
+    (Time.posixToMillis time1 - Time.posixToMillis time2) // 1000
+
 
 formatTicks : Int -> String
 formatTicks stopwatchTicks =
@@ -32,7 +42,7 @@ formatTicks stopwatchTicks =
             stopwatchTicks // 3600
 
         minutes =
-            (modBy 3600 stopwatchTicks) // 60
+            modBy 3600 stopwatchTicks // 60
 
         secs =
             stopwatchTicks - hours * 3600 - minutes * 60

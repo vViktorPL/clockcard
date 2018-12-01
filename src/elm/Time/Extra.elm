@@ -1,17 +1,19 @@
-module Time.Extra exposing (posixDecoder, encodePosix, humanReadableDurationToSecs, viewPosix, durationHumanReadable)
+module Time.Extra exposing (durationHumanReadable, encodePosix, humanReadableDurationToSecs, posixDecoder, viewPosix)
 
-import Time exposing (Posix)
-import Json.Decode as D exposing (Decoder)
-import Json.Encode as E exposing (Value)
-import Regex exposing (Regex)
-import Maybe.Extra
 import Html exposing (Html)
 import Html.Attributes exposing (attribute, datetime)
 import Iso8601
+import Json.Decode as D exposing (Decoder)
+import Json.Encode as E exposing (Value)
+import Maybe.Extra
+import Regex exposing (Regex)
+import Time exposing (Posix)
+
 
 posixDecoder : Decoder Posix
 posixDecoder =
     D.map Time.millisToPosix D.int
+
 
 encodePosix : Posix -> Value
 encodePosix posix =
@@ -27,12 +29,14 @@ humanReadableDurationToSecs durationString =
         |> Maybe.Extra.combine
         |> Maybe.map List.sum
         |> Maybe.andThen
-            ( \sum ->
+            (\sum ->
                 if sum > 0 then
                     Just sum
+
                 else
                     Nothing
             )
+
 
 parseHumanReadableValueWithUnit : String -> Maybe Int
 parseHumanReadableValueWithUnit string =
@@ -41,13 +45,21 @@ parseHumanReadableValueWithUnit string =
             String.dropRight 1 string
                 |> String.toInt
 
-        unit = String.right 1 string
+        unit =
+            String.right 1 string
     in
-    case (value, unit) of
-        (Just hours, "h") -> Just (hours * 3600)
-        (Just minutes, "m") -> Just (minutes * 60)
-        (Just seconds, "s") -> Just seconds
-        _ -> Nothing
+    case ( value, unit ) of
+        ( Just hours, "h" ) ->
+            Just (hours * 3600)
+
+        ( Just minutes, "m" ) ->
+            Just (minutes * 60)
+
+        ( Just seconds, "s" ) ->
+            Just seconds
+
+        _ ->
+            Nothing
 
 
 humanReadableDurationRegex : Regex
@@ -58,21 +70,28 @@ humanReadableDurationRegex =
 
 durationHumanReadable : Int -> String
 durationHumanReadable totalSecs =
-    if totalSecs == 0 then "0"
+    if totalSecs == 0 then
+        "0"
+
     else
         let
-            hours = totalSecs // 3600
-            minutes = (totalSecs - (hours * 3600)) // 60
+            hours =
+                totalSecs // 3600
+
+            minutes =
+                (totalSecs - (hours * 3600)) // 60
+
             secs =
                 if hours == 0 && minutes == 0 then
                     totalSecs - (hours * 3600) - (minutes * 60)
+
                 else
                     0
         in
-            [ (hours, "h"), (minutes, "m"), (secs, "s") ]
-                |> List.filter (\(count, _) -> count > 0)
-                |> List.map (\(count, unit) -> String.fromInt count ++ unit)
-                |> String.join " "
+        [ ( hours, "h" ), ( minutes, "m" ), ( secs, "s" ) ]
+            |> List.filter (\( count, _ ) -> count > 0)
+            |> List.map (\( count, unit ) -> String.fromInt count ++ unit)
+            |> String.join " "
 
 
 viewPosix : Posix -> Html msg

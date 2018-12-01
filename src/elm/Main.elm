@@ -2,14 +2,14 @@ port module Main exposing (main)
 
 import Browser
 import Html exposing (Html, div)
-import Html.Attributes exposing (id, class, style)
-import IssueList exposing (..)
-import Timesheet
-import Json.Decode exposing (Decoder, decodeValue, field, at)
-import Json.Encode exposing (Value, int)
-import Time exposing (Posix)
+import Html.Attributes exposing (class, id, style)
 import Integrations
+import IssueList exposing (..)
+import Json.Decode exposing (Decoder, at, decodeValue, field)
+import Json.Encode exposing (Value, int)
 import Task
+import Time exposing (Posix)
+import Timesheet
 
 
 port save : Value -> Cmd msg
@@ -24,7 +24,7 @@ type Msg
 
 type alias Model =
     { issues : IssueList.Model
-    , integrations: Integrations.Configs
+    , integrations : Integrations.Configs
     , currentTime : Posix
     }
 
@@ -43,6 +43,7 @@ getCurrentTimesheet model =
         |> IssueList.getSelectedIssue
         |> Maybe.map .timesheet
 
+
 view : Model -> Html Msg
 view model =
     div
@@ -60,8 +61,8 @@ viewIssuePanel model =
             Html.map TimesheetMsg (Timesheet.view model.integrations currentTimesheet model.currentTime)
 
         Nothing ->
-            Html.div [ class "big-placeholder-message"]
-                [ Html.div [ class "big-icon" ] [ Html.text "👋"]
+            Html.div [ class "big-placeholder-message" ]
+                [ Html.div [ class "big-icon" ] [ Html.text "👋" ]
                 , Html.strong [] [ Html.text "Hello there!" ]
                 , Html.p []
                     [ Html.text "To create your first time-tracked issue"
@@ -85,9 +86,9 @@ encodeState model =
 decoder : Decoder Model
 decoder =
     Json.Decode.map3 Model
-        ( field "issues" IssueList.decoder )
-        ( field "integrations" Integrations.decodeConfigs )
-        ( Json.Decode.succeed ( Time.millisToPosix 0 ) )
+        (field "issues" IssueList.decoder)
+        (field "integrations" Integrations.decodeConfigs)
+        (Json.Decode.succeed (Time.millisToPosix 0))
 
 
 saveNormalized model =
@@ -127,31 +128,49 @@ update msg model =
             case getSelectedIssue model.issues of
                 Just selectedIssue ->
                     let
-                        (updatedTimesheet, cmd) = Timesheet.update model.integrations submsg selectedIssue.timesheet
-                        wrappedCmd = Cmd.map TimesheetMsg cmd
-                        updatedIssue = { selectedIssue | timesheet = updatedTimesheet }
-                        updatedModel = { model | issues = IssueList.updateSelectedIssue model.issues updatedIssue }
+                        ( updatedTimesheet, cmd ) =
+                            Timesheet.update model.integrations submsg selectedIssue.timesheet
+
+                        wrappedCmd =
+                            Cmd.map TimesheetMsg cmd
+
+                        updatedIssue =
+                            { selectedIssue | timesheet = updatedTimesheet }
+
+                        updatedModel =
+                            { model | issues = IssueList.updateSelectedIssue model.issues updatedIssue }
                     in
-                        ( updatedModel
-                        , case Timesheet.saveStateAdvised submsg of
-                            True -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
-                            False -> wrappedCmd
-                        )
+                    ( updatedModel
+                    , case Timesheet.saveStateAdvised submsg of
+                        True ->
+                            Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
+
+                        False ->
+                            wrappedCmd
+                    )
 
                 Nothing ->
                     ( model, Cmd.none )
 
         IntegrationConfigManagerMsg submsg ->
             let
-                ( newIntegrationModel, integrationCmd)  = (Integrations.updateConfigManagers submsg model.integrations)
-                wrappedCmd = Cmd.map IntegrationConfigManagerMsg integrationCmd
-                updatedModel = { model | integrations = newIntegrationModel }
+                ( newIntegrationModel, integrationCmd ) =
+                    Integrations.updateConfigManagers submsg model.integrations
+
+                wrappedCmd =
+                    Cmd.map IntegrationConfigManagerMsg integrationCmd
+
+                updatedModel =
+                    { model | integrations = newIntegrationModel }
             in
-                ( updatedModel
-                , case Integrations.configsSaveAdvised submsg of
-                    True -> Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
-                    False -> wrappedCmd
-                )
+            ( updatedModel
+            , case Integrations.configsSaveAdvised submsg of
+                True ->
+                    Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
+
+                False ->
+                    wrappedCmd
+            )
 
 
 init : Flags -> ( Model, Cmd Msg )
@@ -165,12 +184,13 @@ init flags =
             , integrations = Integrations.initConfigs
             , currentTime = Time.millisToPosix 0
             }
-
     , refreshTime
     )
 
+
 refreshTime : Cmd Msg
-refreshTime = Task.perform Tick Time.now
+refreshTime =
+    Task.perform Tick Time.now
 
 
 main =
@@ -181,7 +201,7 @@ main =
         , subscriptions =
             \model ->
                 Sub.batch
-                    [ (Time.every 1000 Tick)
-                    , (Sub.map IntegrationConfigManagerMsg Integrations.subscriptions)
+                    [ Time.every 1000 Tick
+                    , Sub.map IntegrationConfigManagerMsg Integrations.subscriptions
                     ]
         }

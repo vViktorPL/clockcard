@@ -1,17 +1,18 @@
 module Integrations.Jira.Config exposing
     ( Model
     , Msg
+    , ProjectData
+    , ValidDestination
     , decoder
-    , init
     , encode
+    , getValidDestinations
+    , init
     , stateSaveAdvised
     , update
     , view
-    , ProjectData
-    , getValidDestinations
-    , ValidDestination
     )
 
+import Assets exposing (getImageUrl)
 import Html exposing (Html, div, form)
 import Html.Attributes exposing (class, classList, disabled, style, type_, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
@@ -21,9 +22,11 @@ import Json.Encode as E exposing (Value)
 import SelectableList exposing (SelectableList)
 import Task
 import Time exposing (Posix)
-import Assets exposing (getImageUrl)
 
-type alias Seconds = Int
+
+type alias Seconds =
+    Int
+
 
 type Validity
     = Valid
@@ -32,11 +35,12 @@ type Validity
 
 
 type alias ValidDestination =
-    { id: String
-    , name: String
-    , cred: Jira.Api.Cred
-    , projects: List ProjectData
+    { id : String
+    , name : String
+    , cred : Jira.Api.Cred
+    , projects : List ProjectData
     }
+
 
 type alias Destination =
     { id : Int
@@ -81,7 +85,6 @@ type alias Model =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-
         SelectDestination destination ->
             ( selectDestination model destination, Cmd.none )
 
@@ -155,10 +158,10 @@ addNewDestination model =
         | destinations =
             case model.destinations of
                 Just selectableList ->
-                    Just (SelectableList.prepend selectableList (newDestination model.nextDestinationId) )
+                    Just (SelectableList.prepend selectableList (newDestination model.nextDestinationId))
 
                 Nothing ->
-                    SelectableList.fromList [ (newDestination model.nextDestinationId) ]
+                    SelectableList.fromList [ newDestination model.nextDestinationId ]
         , nextDestinationId = model.nextDestinationId + 1
     }
 
@@ -202,7 +205,7 @@ updateSelectedDestination msg model =
 
 view : Model -> Html Msg
 view model =
-    (case model.destinations of
+    case model.destinations of
         Just selectableList ->
             div [ class "manager-window__content" ]
                 [ div [ class "manager-window__destinations-list" ]
@@ -221,31 +224,36 @@ view model =
         Nothing ->
             div [ class "big-placeholder-message" ]
                 [ Html.div [ class "big-icon" ] [ Html.text "🕸️" ]
-                , Html.strong [] [ Html.text "No JIRA destinations added yet. "]
+                , Html.strong [] [ Html.text "No JIRA destinations added yet. " ]
                 , Html.p []
                     [ Html.text "Please "
                     , Html.a [ onClick NewDestination ] [ Html.text "add first one" ]
-                     , Html.text "."
+                    , Html.text "."
                     ]
                 ]
-    )
 
 
 viewDestination : Destination -> Bool -> Html Msg
 viewDestination destination isSelected =
     div [ classList [ ( "selected", isSelected ) ] ]
         [ Html.text
-            (
-                ( case destination.name of
-                    "" -> "New untitled destination"
-                    name -> name
-                )
-                ++
-                ( case destination.valid of
-                    Valid -> " ✅"
-                    Checking -> " ⌛"
-                    Invalid -> " ❌"
-                )
+            ((case destination.name of
+                "" ->
+                    "New untitled destination"
+
+                name ->
+                    name
+             )
+                ++ (case destination.valid of
+                        Valid ->
+                            " ✅"
+
+                        Checking ->
+                            " ⌛"
+
+                        Invalid ->
+                            " ❌"
+                   )
             )
         , Html.span []
             [ Html.text
@@ -351,18 +359,16 @@ decoder =
 encode : Model -> Value
 encode model =
     E.object
-        [
-            ("destinations"
-            , case model.destinations of
-                  Just selectableList ->
-                      SelectableList.normalize encodeDestination selectableList
+        [ ( "destinations"
+          , case model.destinations of
+                Just selectableList ->
+                    SelectableList.normalize encodeDestination selectableList
 
-                  Nothing ->
-                      E.null
-            )
-        , ("nextDestinationId", E.int model.nextDestinationId)
+                Nothing ->
+                    E.null
+          )
+        , ( "nextDestinationId", E.int model.nextDestinationId )
         ]
-
 
 
 encodeDestination : Destination -> E.Value
@@ -442,19 +448,21 @@ validDecoder =
                     Invalid
             )
 
+
 destinationToCred : Destination -> Result String Jira.Api.Cred
 destinationToCred destination =
     Jira.Api.createBasicAuthCred destination.host ( destination.authUsername, destination.authPassword )
+
 
 getValidDestinations : Model -> List ValidDestination
 getValidDestinations model =
     model.destinations
         |> Maybe.map SelectableList.getItems
         |> Maybe.map
-            ( List.filterMap
-                ( \destination ->
-                    case (destination.valid, destinationToCred destination) of
-                        (Valid, Ok cred) ->
+            (List.filterMap
+                (\destination ->
+                    case ( destination.valid, destinationToCred destination ) of
+                        ( Valid, Ok cred ) ->
                             Just
                                 { id = String.fromInt destination.id
                                 , name = destination.name
@@ -462,8 +470,8 @@ getValidDestinations model =
                                 , projects = destination.projects |> Maybe.withDefault []
                                 }
 
-                        _ -> Nothing
+                        _ ->
+                            Nothing
                 )
             )
         |> Maybe.withDefault []
-

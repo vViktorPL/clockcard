@@ -1,8 +1,8 @@
 module SelectableList exposing
     ( SelectableList(..)
     , fromList, select
-    , isSelected, getItems, member, getSelected
-    , decoder, map, mapSelected, normalize, prepend
+    , isSelected, member
+    , decoder, getItems, getSelected, map, mapSelected, normalize, prepend
     )
 
 {-| Provides `SelectableList`, a list with a selected item. Because the list
