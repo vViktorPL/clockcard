@@ -1,40 +1,68 @@
-module IssueList exposing (Model, Msg(..), decoder, getSelectedIssue, init, normalize, update, updateSelectedIssue, view)
+module IssueList exposing
+    ( Model
+    , Msg(..)
+    , GetTimesheetError(..)
+    , GetTimesheetResult
+    , fetchAllIssues
+    , getSelectedIssueTimesheet
+    , update
+    , updateSelectedIssue
+    , updateSelectedIssueTimesheet
+    , view
+    )
 
 import Browser.Dom exposing (focus)
 import Html exposing (Html, div, input, text)
 import Html.Attributes exposing (class, classList, id, placeholder, type_)
 import Html.Events exposing (onBlur, onClick, onInput)
 import Html.Events.Extra exposing (onEnter)
-import Issue exposing (IssueId, Model)
+
 import Json.Decode as D exposing (Decoder)
 import Json.Encode as E exposing (Value)
 import SelectableList exposing (..)
 import Task exposing (attempt)
 import Timesheet
+import Time exposing (Posix)
+import Maybe.Extra
+import Iso8601
+import Http
+
+type alias MinimalIssueData =
+    { id: Int
+    , name: String
+    , periodInProgress: Maybe Posix
+    }
+
+type alias FullIssueData =
+    { id: Int
+    , name: String
+    , timesheet : Timesheet.Model
+    }
+
+type Issue = Entry MinimalIssueData | Full FullIssueData
 
 
 type alias Model =
-    { list : Maybe (SelectableList Issue.Model)
+    { list : Maybe (SelectableList Issue)
     , newIssueName : Maybe String
-    , currentId : IssueId
     }
 
 
 type Msg
-    = SelectIssue Issue.Model
+    = SelectIssue Issue
     | PromptNewIssueName
-    | NewIssue
+    | RequestNewIssue
+    | IssueCreated (Result Http.Error Issue)
     | NewIssueNameChange String
     | NewIssueInputFocus (Result Browser.Dom.Error ())
     | NewIssueInputBlur
+    | IssueDetails (Result Http.Error Issue)
 
 
-init : Model
-init =
-    { list = Nothing
-    , newIssueName = Nothing
-    , currentId = 1
-    }
+fetchAllIssues : (Result Http.Error Model -> msg) -> Cmd msg
+fetchAllIssues msg =
+    Http.get "backend:/db/issues" decoder
+        |> Http.send msg
 
 
 view : Model -> Html Msg
@@ -46,17 +74,21 @@ view model =
         )
 
 
-isIssueRunning : Issue.Model -> Bool
+isIssueRunning : Issue -> Bool
 isIssueRunning issue =
-    case Timesheet.getCurrentlyRunningPeriodStart issue.timesheet of
-        Just _ ->
-            True
+    let
+        currentPeriodStart =
+            case issue of
+                Entry { periodInProgress } ->
+                    periodInProgress
 
-        Nothing ->
-            False
+                Full { timesheet } ->
+                    Timesheet.getCurrentlyRunningPeriodStart timesheet
+    in
+    Maybe.Extra.isJust currentPeriodStart
 
 
-viewIssues : SelectableList Issue.Model -> List (Html Msg)
+viewIssues : SelectableList Issue -> List (Html Msg)
 viewIssues issueList =
     issueList
         |> SelectableList.getItems
@@ -70,9 +102,14 @@ viewIssues issueList =
                         ]
                     , onClick (SelectIssue issue)
                     ]
-                    [ text issue.name ]
+                    [ viewIssue issue ]
             )
 
+viewIssue : Issue -> Html Msg
+viewIssue issue =
+    case issue of
+        Full { name } -> Html.text name
+        Entry { name } -> Html.text name
 
 viewAddButton : Maybe String -> Html Msg
 viewAddButton newIssueName =
@@ -85,7 +122,7 @@ viewAddButton newIssueName =
                     , id "issue-list__new-issue-input"
                     , placeholder "Enter new issue name"
                     , onInput NewIssueNameChange
-                    , onEnter NewIssue
+                    , onEnter RequestNewIssue
                     , onBlur NewIssueInputBlur
                     ]
                     []
@@ -100,10 +137,15 @@ viewAddButton newIssueName =
                 ]
 
 
-updateListInModel : Model -> (SelectableList Issue.Model -> SelectableList Issue.Model) -> Model
+updateListInModel : Model -> (SelectableList Issue -> SelectableList Issue) -> Model
 updateListInModel model updateList =
     { model | list = Maybe.map updateList model.list }
 
+getIssueId : Issue -> Int
+getIssueId issue =
+    case issue of
+        Full { id } -> id
+        Entry { id } -> id
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -112,7 +154,7 @@ update msg model =
             case model.list of
                 Just issueList ->
                     ( updateListInModel model (\list -> Maybe.withDefault issueList (SelectableList.select issue list))
-                    , Cmd.none
+                    , fetchIssueDetails issue
                     )
 
                 Nothing ->
@@ -136,7 +178,41 @@ update msg model =
             , Cmd.none
             )
 
-        NewIssue ->
+        IssueDetails (Ok newIssue) ->
+            case model.list of
+                Just selectableList ->
+                    ({ model | list =
+                        Just
+                            ( SelectableList.map
+                                (\currentIssue ->
+                                    if getIssueId currentIssue == getIssueId newIssue then
+                                        newIssue
+                                    else
+                                        currentIssue
+                                )
+                                selectableList
+                            )
+                    }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    (model, Cmd.none)
+
+        IssueCreated (Ok issue) ->
+            ( { model | list =
+                case model.list of
+                    Just selectableList ->
+                        SelectableList.prepend selectableList issue
+                            |> SelectableList.select issue
+
+                    Nothing ->
+                        SelectableList.fromList [ issue ]
+              }
+            , Cmd.none
+            )
+
+        RequestNewIssue ->
             case model.newIssueName of
                 Just "" ->
                     ( model
@@ -149,58 +225,80 @@ update msg model =
                     )
 
                 Just newIssueName ->
-                    let
-                        newIssue : Issue.Model
-                        newIssue =
-                            { id = model.currentId
-                            , name = newIssueName
-                            , timesheet = Timesheet.init
-                            }
-
-                        updatedList =
-                            case model.list of
-                                Just selectableList ->
-                                    SelectableList.prepend selectableList newIssue
-                                        |> SelectableList.select newIssue
-
-                                Nothing ->
-                                    SelectableList.fromList [ newIssue ]
-                    in
-                    ( { model
-                        | list = updatedList
-                        , currentId = model.currentId + 1
-                        , newIssueName = Nothing
-                      }
-                    , Cmd.none
+                    ( model
+                    , createNewIssue newIssueName
                     )
+        _ -> (model, Cmd.none)
+
+fetchIssueDetails : Issue -> Cmd Msg
+fetchIssueDetails issue =
+    case issue of
+        Full _ -> Cmd.none
+        Entry { id } ->
+            Http.get ("backend:/db/issues/" ++ (String.fromInt id)) fullIssueDecoder
+                |> Http.send IssueDetails
+
+createNewIssue : String -> Cmd Msg
+createNewIssue name =
+    Http.post "backend:/db/issues" (Http.jsonBody (E.object [ ("name", E.string name) ])) fullIssueDecoder
+        |> Http.send IssueCreated
 
 
-getSelectedIssue : Model -> Maybe Issue.Model
-getSelectedIssue model =
-    Maybe.map SelectableList.getSelected model.list
+type GetTimesheetError = ListIsEmpty | FetchingIssueDetailsInProgress
+type alias GetTimesheetResult = Result GetTimesheetError Timesheet.Model
+
+getSelectedIssueTimesheet : Model -> GetTimesheetResult
+getSelectedIssueTimesheet model =
+    model.list
+        |> Maybe.map SelectableList.getSelected
+        |> Result.fromMaybe ListIsEmpty
+        |> Result.andThen
+            (\issue ->
+                case issue of
+                    Full { timesheet } -> Ok timesheet
+                    Entry _ -> Err FetchingIssueDetailsInProgress
+            )
+
+updateSelectedIssueTimesheet : Model -> Timesheet.Model -> Model
+updateSelectedIssueTimesheet model timesheet =
+    { model | list = Maybe.map (SelectableList.mapSelected (updateIssueTimesheet timesheet) ) model.list }
 
 
-updateSelectedIssue : Model -> Issue.Model -> Model
+updateIssueTimesheet : Timesheet.Model -> Issue -> Issue
+updateIssueTimesheet timesheet issue =
+    case issue of
+        Full issueData -> Full { issueData | timesheet = timesheet }
+        Entry issueData -> Full { id = issueData.id, name = issueData.name, timesheet = timesheet }
+
+updateSelectedIssue : Model -> Issue -> Model
 updateSelectedIssue model updatedIssue =
     { model | list = Maybe.map (SelectableList.mapSelected (\_ -> updatedIssue)) model.list }
 
 
-normalize : Model -> Value
-normalize model =
-    E.object
-        [ ( "list", Maybe.map (SelectableList.normalize Issue.normalize) model.list |> Maybe.withDefault E.null )
-        , ( "currentId", E.int model.currentId )
-        ]
-
-
 decoder : Decoder Model
 decoder =
-    D.map2
-        (\list currentId ->
-            { list = list
-            , currentId = currentId
-            , newIssueName = Nothing
-            }
-        )
-        (D.field "list" (D.nullable (SelectableList.decoder Issue.decoder)))
-        (D.field "currentId" D.int)
+    D.list issueEntryDecoder
+        |> D.map
+            ( \list ->
+                 { list = SelectableList.fromList list
+                 , newIssueName = Nothing
+                 }
+            )
+
+
+issueEntryDecoder : Decoder Issue
+issueEntryDecoder =
+    D.map Entry <|
+    D.map3 MinimalIssueData
+        (D.field "id" D.int)
+        (D.field "name" D.string)
+        (D.at ["timesheet", "periodInProgress"] (D.nullable Iso8601.decoder))
+
+fullIssueDecoder : Decoder Issue
+fullIssueDecoder =
+    D.map Full <|
+    D.map3 FullIssueData
+        (D.field "id" D.int)
+        (D.field "name" D.string)
+        (D.field "timesheet" Timesheet.decoder)
+

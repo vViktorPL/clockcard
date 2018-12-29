@@ -447,7 +447,7 @@ decoder =
                             |> List.foldl (+) 0
                 in
                 D.map5 TimesheetData
-                    (D.field "currentTab" tabDecoder)
+                    (D.succeed PeriodsTab) -- (D.field "currentTab" tabDecoder)
                     (D.succeed (List.map (\period -> ( False, period )) finishedPeriods))
                     (D.field "periodInProgress" (D.nullable posixDecoder))
                     (D.succeed cumulatedTicks)

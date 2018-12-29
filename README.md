@@ -34,7 +34,7 @@ yarn watch
 
 - `src/static/main.js` - Starts the app and creates a browser window to render HTML. This is the app's **main process**.
 - `src/static/index.html` - A web page to render. This is the app's **renderer process**.
-- `src/static/ports.js` - JS code which initializes and communicates with Elm app (performs some side-effects like App state saving)
+- `src/static/app.js` - JS code which initializes and communicates with Elm app (performs some side-effects like App state saving)
 - `src/static/base.css` - CSS styles for the App
 - `src/elm/Main.elm` - Main App module source code
 

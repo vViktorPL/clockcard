@@ -9,7 +9,10 @@
     "elm:watch": "chokidar 'src/**/*.elm' -c 'yarn elm'",
     "watch": "yarn start & yarn elm:watch & wait",
     "test": "elm-test",
-    "build:mac": "elm make ./src/elm/Main.elm --output ./src/static/elm.js --optimize && electron-packager . ClockCard --platform=darwin --icon=assets/icons/256x256.icns --out dist --overwrite"
+    "build:mac": "elm make ./src/elm/Main.elm --output ./src/static/elm.js --optimize && electron-packager . ClockCard --platform=darwin --icon=assets/icons/256x256.icns --out dist --overwrite",
+    "postinstall": "npm run rebuild-sqlite3",
+    "rebuild-sqlite3": "cd node_modules/sqlite3 && node-gyp configure --module_name=node_sqlite3 --module_path=../lib/binding/electron-v1.8-darwin-x64 && node-gyp rebuild --arch=x64 --target=1.8.8 --target_platform=darwin --module_name=node_sqlite3 --module_path=../lib/binding/electron-v1.8-darwin-x64 --dist-url=https://atom.io/download/atom-shell",
+    "rebuild-sqlite3-win": "cd node_modules/sqlite3 node-gyp configure --module_name=node_sqlite3 --module_path=../lib/binding/electron-v1.8-win32-x64 && node-gyp node-gyp rebuild --target=1.8.8 --arch=x64 --target_platform=win32 --module_name=node_sqlite3 --module_path=../lib/binding/electron-v1.8-win32-x64 --dist-url=https://atom.io/download/atom-shell"
   },
   "repository": "https://github.com/vViktorPL/clockcard.git",
   "keywords": [
@@ -28,7 +31,10 @@
     "elm-test": "^0.19.0-beta12"
   },
   "dependencies": {
+    "dexie": "^2.0.4",
     "electron-default-menu": "^1.0.1",
+    "lodash": "^4.17.11",
+    "sqlite3": "^4.0.4",
     "time-elements": "^1.2.0"
   }
 }

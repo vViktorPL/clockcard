@@ -13,6 +13,8 @@ const { version: appVersion } = require('./package.json');
 let mainWindow;
 
 function createWindow () {
+  require('./src/backend/app').listen();
+
   // JIRA REST API fails when sending POST/PUT etc requests with browser-like User-Agent header
   electron.session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
     details.requestHeaders['User-Agent'] = `ClockCard App v${appVersion}`;
@@ -36,7 +38,7 @@ function createWindow () {
   }));
 
   // Open the DevTools.
-  // mainWindow.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
 
   // Emitted when the window is closed.
   mainWindow.on('closed', function () {

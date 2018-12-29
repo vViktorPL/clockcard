@@ -10,20 +10,19 @@ import Json.Encode exposing (Value, int)
 import Task
 import Time exposing (Posix)
 import Timesheet
-
-
-port save : Value -> Cmd msg
+import Http
 
 
 type Msg
     = TimesheetMsg Timesheet.Msg
     | IssueListMsg IssueList.Msg
+    | IssueListFetched (Result Http.Error IssueList.Model)
     | IntegrationConfigManagerMsg Integrations.ConfigsMsg
     | Tick Posix
 
 
 type alias Model =
-    { issues : IssueList.Model
+    { issues : Maybe IssueList.Model
     , integrations : Integrations.Configs
     , currentTime : Posix
     }
@@ -37,30 +36,34 @@ type alias Flags =
     Value
 
 
-getCurrentTimesheet : Model -> Maybe Timesheet.Model
-getCurrentTimesheet model =
-    model.issues
-        |> IssueList.getSelectedIssue
-        |> Maybe.map .timesheet
-
 
 view : Model -> Html Msg
 view model =
     div
         [ id "container" ]
-        [ Html.map IssueListMsg (IssueList.view model.issues)
-        , viewIssuePanel model
-        , Html.map IntegrationConfigManagerMsg (Integrations.viewConfigManagers model.integrations)
-        ]
+        ( case model.issues of
+            Just issues ->
+                [ Html.map IssueListMsg (IssueList.view issues)
+                , viewIssuePanel issues model.integrations model.currentTime
+                , Html.map IntegrationConfigManagerMsg (Integrations.viewConfigManagers model.integrations)
+                ]
+
+            Nothing ->
+                [ Html.div [ class "big-placeholder-message" ]
+                      [ Html.div [ class "big-icon" ] [ Html.text "⌛" ]
+                      , Html.strong [] [ Html.text "Loading issues..." ]
+                      ]
+                ]
+        )
 
 
-viewIssuePanel : Model -> Html Msg
-viewIssuePanel model =
-    case getCurrentTimesheet model of
-        Just currentTimesheet ->
-            Html.map TimesheetMsg (Timesheet.view model.integrations currentTimesheet model.currentTime)
+viewIssuePanel : IssueList.Model -> Integrations.Configs -> Posix -> Html Msg
+viewIssuePanel issues integrations currentTime =
+    case getSelectedIssueTimesheet issues of
+        Ok currentTimesheet ->
+            Html.map TimesheetMsg (Timesheet.view integrations currentTimesheet currentTime)
 
-        Nothing ->
+        Err IssueList.ListIsEmpty ->
             Html.div [ class "big-placeholder-message" ]
                 [ Html.div [ class "big-icon" ] [ Html.text "👋" ]
                 , Html.strong [] [ Html.text "Hello there!" ]
@@ -73,118 +76,81 @@ viewIssuePanel model =
                     ]
                 ]
 
-
-encodeState : Model -> Value
-encodeState model =
-    Json.Encode.object
-        [ ( "version", int 1 )
-        , ( "issues", IssueList.normalize model.issues )
-        , ( "integrations", Integrations.encodeConfigs model.integrations )
-        ]
+        Err IssueList.FetchingIssueDetailsInProgress ->
+            Html.div [ class "big-placeholder-message" ]
+                [ Html.div [ class "big-icon" ] [ Html.text "⌛" ]
+                , Html.strong [] [ Html.text "Loading issue details..." ]
+                ]
 
 
-decoder : Decoder Model
-decoder =
-    Json.Decode.map3 Model
-        (field "issues" IssueList.decoder)
-        (field "integrations" Integrations.decodeConfigs)
-        (Json.Decode.succeed (Time.millisToPosix 0))
-
-
-saveNormalized model =
-    model |> encodeState |> save
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case msg of
-        IssueListMsg submsg ->
+    case (msg, model.issues) of
+        (IssueListFetched (Ok issues), Nothing) ->
+            ( { model | issues = Just issues }
+            , Cmd.none
+            )
+
+        (IssueListMsg submsg, Just issues) ->
             let
                 ( updatedIssues, cmd ) =
-                    IssueList.update submsg model.issues
+                    IssueList.update submsg issues
 
                 wrappedCmd =
                     Cmd.map IssueListMsg cmd
 
                 updatedModel =
-                    { model | issues = updatedIssues }
+                    { model | issues = Just updatedIssues }
             in
             ( updatedModel
             , case submsg of
                 IssueList.SelectIssue _ ->
                     Cmd.batch [ wrappedCmd, refreshTime ]
 
-                IssueList.NewIssue ->
-                    Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
-
                 _ ->
                     wrappedCmd
             )
 
-        Tick time ->
+        (Tick time, _) ->
             ( { model | currentTime = time }, Cmd.none )
 
-        TimesheetMsg submsg ->
-            case getSelectedIssue model.issues of
-                Just selectedIssue ->
+        (TimesheetMsg submsg, Just issues) ->
+            case getSelectedIssueTimesheet issues of
+                Ok selectedIssueTimesheet ->
                     let
                         ( updatedTimesheet, cmd ) =
-                            Timesheet.update model.integrations submsg selectedIssue.timesheet
-
-                        wrappedCmd =
-                            Cmd.map TimesheetMsg cmd
-
-                        updatedIssue =
-                            { selectedIssue | timesheet = updatedTimesheet }
-
-                        updatedModel =
-                            { model | issues = IssueList.updateSelectedIssue model.issues updatedIssue }
+                            Timesheet.update model.integrations submsg selectedIssueTimesheet
                     in
-                    ( updatedModel
-                    , case Timesheet.saveStateAdvised submsg of
-                        True ->
-                            Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
-
-                        False ->
-                            wrappedCmd
+                    ( { model | issues = Just (updateSelectedIssueTimesheet issues updatedTimesheet) }
+                    , Cmd.map TimesheetMsg cmd
                     )
 
-                Nothing ->
+                Err _ ->
                     ( model, Cmd.none )
 
-        IntegrationConfigManagerMsg submsg ->
+        (IntegrationConfigManagerMsg submsg, _) ->
             let
                 ( newIntegrationModel, integrationCmd ) =
                     Integrations.updateConfigManagers submsg model.integrations
-
-                wrappedCmd =
-                    Cmd.map IntegrationConfigManagerMsg integrationCmd
-
-                updatedModel =
-                    { model | integrations = newIntegrationModel }
             in
-            ( updatedModel
-            , case Integrations.configsSaveAdvised submsg of
-                True ->
-                    Cmd.batch [ wrappedCmd, saveNormalized updatedModel ]
-
-                False ->
-                    wrappedCmd
+            ( { model | integrations = newIntegrationModel }
+            , Cmd.map IntegrationConfigManagerMsg integrationCmd
             )
 
+        _ -> (model, Cmd.none)
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
-    ( case decodeValue decoder flags of
-        Ok model ->
-            model
-
-        Err _ ->
-            { issues = IssueList.init
-            , integrations = Integrations.initConfigs
-            , currentTime = Time.millisToPosix 0
-            }
-    , refreshTime
+    ( { issues = Nothing
+      , integrations = Integrations.initConfigs
+      , currentTime = Time.millisToPosix 0
+      }
+    , Cmd.batch
+        [ refreshTime
+        , IssueList.fetchAllIssues IssueListFetched
+        ]
     )
 
 
